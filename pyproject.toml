@@ -6,6 +6,11 @@ build-backend = "hatchling.build"
 name = "py-rag-engine"
 version = "0.1.0"
 description = "RAG engine with document ingestion (PDF, Markdown)"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Your Name", email = "you@example.com" },
+]
 requires-python = ">=3.10"
 dependencies = [
     "langchain-text-splitters>=0.2.0",
