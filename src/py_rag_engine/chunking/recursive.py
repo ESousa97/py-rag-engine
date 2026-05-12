@@ -10,6 +10,7 @@ def dynamic_chunk_overlap(
     min_overlap: int = 32,
     max_overlap: int = 512,
 ) -> int:
+    """Compute overlap from chunk size while keeping it within practical bounds."""
     overlap = int(round(chunk_size * ratio))
     return max(min_overlap, min(max_overlap, overlap))
 
@@ -23,6 +24,7 @@ def make_recursive_splitter(
     max_overlap: int = 512,
     separators: list[str] | None = None,
 ) -> RecursiveCharacterTextSplitter:
+    """Build the recursive splitter used by the ingestion pipeline."""
     overlap = (
         chunk_overlap
         if chunk_overlap is not None
@@ -30,6 +32,7 @@ def make_recursive_splitter(
             chunk_size, ratio=overlap_ratio, min_overlap=min_overlap, max_overlap=max_overlap
         )
     )
+    # Prefer natural document boundaries before falling back to smaller separators.
     seps = separators if separators is not None else ["\n\n", "\n", ". ", " ", ""]
     return RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
@@ -50,6 +53,7 @@ def split_text_recursive(
     max_overlap: int = 512,
     separators: list[str] | None = None,
 ) -> list[str]:
+    """Split text into non-empty recursive chunks."""
     splitter = make_recursive_splitter(
         chunk_size,
         chunk_overlap,

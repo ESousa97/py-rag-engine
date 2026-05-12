@@ -34,3 +34,11 @@ pip-wheel-metadata/
 
 # Logs
 *.log
+
+# Local datasets and generated ingestion results
+data/*.pdf
+data/*.PDF
+data/*.parquet
+data/*.arrow
+results/
+outputs/

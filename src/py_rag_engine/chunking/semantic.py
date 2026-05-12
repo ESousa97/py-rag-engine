@@ -12,6 +12,7 @@ EmbeddingBatchFn: TypeAlias = Callable[[list[str]], Sequence[Sequence[float]]]
 
 
 def split_paragraphs(text: str) -> list[str]:
+    """Split text on blank-line paragraph boundaries."""
     parts = re.split(r"\n\s*\n", text.strip())
     return [p.strip() for p in parts if p.strip()]
 
@@ -24,6 +25,7 @@ def semantic_paragraph_chunking(
     max_paragraphs_per_chunk: int = 48,
     embed_batch_size: int = 32,
 ) -> list[str]:
+    """Group paragraphs until adjacent embeddings indicate a topic shift."""
     paragraphs = split_paragraphs(text)
     if not paragraphs:
         return []
@@ -39,6 +41,7 @@ def semantic_paragraph_chunking(
 
     topic_starts: list[int] = [0]
     for i in range(len(embeddings) - 1):
+        # A low adjacent similarity marks the start of a new semantic segment.
         if cosine_similarity(embeddings[i], embeddings[i + 1]) < similarity_threshold:
             topic_starts.append(i + 1)
     topic_starts.append(len(paragraphs))
@@ -47,6 +50,7 @@ def semantic_paragraph_chunking(
     for lo, hi in zip(topic_starts[:-1], topic_starts[1:], strict=True):
         cursor = lo
         while cursor < hi:
+            # Keep very long same-topic runs bounded before recursive splitting.
             nxt = min(cursor + max_paragraphs_per_chunk, hi)
             ranges.append((cursor, nxt))
             cursor = nxt

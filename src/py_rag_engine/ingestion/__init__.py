@@ -5,6 +5,7 @@ from py_rag_engine.chunking import (
 )
 from py_rag_engine.ingestion.loaders import LoadedPage, load_markdown, load_pdf
 from py_rag_engine.ingestion.pipeline import (
+    chunks_to_dicts,
     deduplicate_chunks,
     ingest_file,
     ingest_path,
@@ -13,6 +14,7 @@ from py_rag_engine.ingestion.pipeline import (
 
 __all__ = [
     "LoadedPage",
+    "chunks_to_dicts",
     "deduplicate_chunks",
     "dynamic_chunk_overlap",
     "ingest_file",

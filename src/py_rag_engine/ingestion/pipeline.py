@@ -16,6 +16,7 @@ _SUFFIX_LOADERS: dict[str, Callable[[Path], list[LoadedPage]]] = {
 
 
 def _load_pages(path: Path) -> list[LoadedPage]:
+    """Load a document using the registered loader for its file suffix."""
     suffix = path.suffix.lower()
     loader = _SUFFIX_LOADERS.get(suffix)
     if loader is None:
@@ -31,6 +32,7 @@ def _segments_for_page(
     semantic_threshold: float,
     max_paragraphs_per_chunk: int,
 ) -> list[str]:
+    """Return semantic page segments when enabled, otherwise the original page text."""
     if use_semantic and embed is not None:
         return semantic_paragraph_chunking(
             text,
@@ -55,6 +57,7 @@ def ingest_path(
     semantic_max_paragraphs_per_chunk: int = 48,
     deduplicate_by_hash: bool = True,
 ) -> list[DocumentChunk]:
+    """Resolve a user-supplied path and ingest the target document."""
     p = Path(path).expanduser().resolve()
     if not p.is_file():
         raise FileNotFoundError(p)
@@ -74,7 +77,7 @@ def ingest_path(
 
 
 def ingest_file(
-    path: Path,
+    path: str | Path,
     *,
     chunk_size: int = 1200,
     chunk_overlap: int | None = None,
@@ -87,16 +90,23 @@ def ingest_file(
     semantic_max_paragraphs_per_chunk: int = 48,
     deduplicate_by_hash: bool = True,
 ) -> list[DocumentChunk]:
+    """Ingest a PDF or Markdown file into deduplicated document chunks."""
     if use_semantic_chunking and embed is None:
         raise ValueError("use_semantic_chunking=True requires an embed function.")
 
-    source = str(path.resolve())
-    pages = _load_pages(path)
+    p = Path(path).expanduser().resolve()
+    if not p.is_file():
+        raise FileNotFoundError(p)
+
+    source = str(p)
+    pages = _load_pages(p)
     out: list[DocumentChunk] = []
     seen_hashes: set[str] = set()
     chunk_index = 0
 
     for page in pages:
+        # Semantic segmentation happens before recursive splitting so topic
+        # boundaries are preserved when the final chunks are created.
         segments = _segments_for_page(
             page.text,
             use_semantic=use_semantic_chunking,
@@ -115,6 +125,8 @@ def ingest_file(
             )
             for piece in pieces:
                 h = content_sha256(piece)
+                # Hash-based deduplication prevents repeated extracted text from
+                # being embedded and indexed more than once.
                 if deduplicate_by_hash and h in seen_hashes:
                     continue
                 if deduplicate_by_hash:
@@ -127,6 +139,7 @@ def ingest_file(
 
 
 def deduplicate_chunks(chunks: Sequence[DocumentChunk]) -> list[DocumentChunk]:
+    """Remove duplicated chunks while preserving first-seen order."""
     seen: set[str] = set()
     result: list[DocumentChunk] = []
     for c in chunks:
@@ -137,7 +150,13 @@ def deduplicate_chunks(chunks: Sequence[DocumentChunk]) -> list[DocumentChunk]:
     return result
 
 
+def chunks_to_dicts(chunks: Sequence[DocumentChunk]) -> list[dict[str, object]]:
+    """Convert domain chunks into JSON-ready dictionaries."""
+    return [chunk.to_dict() for chunk in chunks]
+
+
 def make_sentence_transformer_embed(model_name: str) -> EmbeddingBatchFn:
+    """Create an embedding callback backed by a SentenceTransformer model."""
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError as e:  # pragma: no cover

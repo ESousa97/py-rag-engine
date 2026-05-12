@@ -13,6 +13,7 @@ def rank_chunks_by_similarity(
     *,
     top_k: int = 5,
 ) -> list[tuple[DocumentChunk, float]]:
+    """Rank chunks by cosine similarity against a query embedding."""
     if len(chunk_embeddings) != len(chunks):
         raise ValueError("chunk_embeddings and chunks must have the same length")
 
