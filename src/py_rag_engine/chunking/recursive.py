@@ -10,11 +10,6 @@ def dynamic_chunk_overlap(
     min_overlap: int = 32,
     max_overlap: int = 512,
 ) -> int:
-    """
-    Overlap scales with ``chunk_size`` (ratio), clamped to ``[min_overlap, max_overlap]``.
-
-    Longer chunks carry more context in the overlap window without dominating small chunks.
-    """
     overlap = int(round(chunk_size * ratio))
     return max(min_overlap, min(max_overlap, overlap))
 
@@ -28,11 +23,6 @@ def make_recursive_splitter(
     max_overlap: int = 512,
     separators: list[str] | None = None,
 ) -> RecursiveCharacterTextSplitter:
-    """
-    Build a ``RecursiveCharacterTextSplitter`` with optional dynamic overlap.
-
-    If ``chunk_overlap`` is ``None``, overlap is computed via :func:`dynamic_chunk_overlap`.
-    """
     overlap = (
         chunk_overlap
         if chunk_overlap is not None

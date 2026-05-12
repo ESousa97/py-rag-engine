@@ -8,11 +8,8 @@ from pypdf import PdfReader
 
 @dataclass(frozen=True, slots=True)
 class LoadedPage:
-    """One page (PDF) or one logical document (Markdown)."""
-
     text: str
     page: int | None
-    """1-based for PDF; ``None`` for Markdown."""
 
 
 def load_pdf(path: Path) -> list[LoadedPage]:

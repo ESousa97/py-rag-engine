@@ -24,14 +24,14 @@ embeddings = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["internal"]
+packages = ["src/py_rag_engine"]
 
 [dependency-groups]
 dev = ["pytest>=8.0.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100

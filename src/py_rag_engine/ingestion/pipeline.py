@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from internal.ingestion.hashing import content_sha256
-from internal.ingestion.loaders import LoadedPage, load_markdown, load_pdf
-from internal.ingestion.models import ChunkMetadata, DocumentChunk
-from internal.ingestion.semantic import EmbeddingBatchFn, semantic_paragraph_chunking
-from internal.ingestion.splitters import split_text_recursive
+from py_rag_engine.chunking import EmbeddingBatchFn, semantic_paragraph_chunking, split_text_recursive
+from py_rag_engine.domain import ChunkMetadata, DocumentChunk
+from py_rag_engine.embeddings.hashing import content_sha256
+from py_rag_engine.ingestion.loaders import LoadedPage, load_markdown, load_pdf
 
 _SUFFIX_LOADERS: dict[str, Callable[[Path], list[LoadedPage]]] = {
     ".pdf": load_pdf,
@@ -56,12 +55,6 @@ def ingest_path(
     semantic_max_paragraphs_per_chunk: int = 48,
     deduplicate_by_hash: bool = True,
 ) -> list[DocumentChunk]:
-    """
-    Load a PDF or Markdown file and return :class:`DocumentChunk` records.
-
-    Pipeline: load pages → optional semantic paragraph grouping → recursive character
-    splitting with dynamic overlap → SHA-256 per chunk.
-    """
     p = Path(path).expanduser().resolve()
     if not p.is_file():
         raise FileNotFoundError(p)
@@ -126,11 +119,7 @@ def ingest_file(
                     continue
                 if deduplicate_by_hash:
                     seen_hashes.add(h)
-                meta = ChunkMetadata(
-                    source=source,
-                    page=page.page,
-                    chunk_index=chunk_index,
-                )
+                meta = ChunkMetadata(source=source, page=page.page, chunk_index=chunk_index)
                 out.append(DocumentChunk(text=piece, metadata=meta, content_hash=h))
                 chunk_index += 1
 
@@ -138,7 +127,6 @@ def ingest_file(
 
 
 def deduplicate_chunks(chunks: Sequence[DocumentChunk]) -> list[DocumentChunk]:
-    """Keep first occurrence per ``content_hash`` (order preserved)."""
     seen: set[str] = set()
     result: list[DocumentChunk] = []
     for c in chunks:
@@ -150,14 +138,9 @@ def deduplicate_chunks(chunks: Sequence[DocumentChunk]) -> list[DocumentChunk]:
 
 
 def make_sentence_transformer_embed(model_name: str) -> EmbeddingBatchFn:
-    """
-    Optional helper when ``sentence-transformers`` is installed::
-
-        pip install 'py-rag-engine[embeddings]'
-    """
     try:
         from sentence_transformers import SentenceTransformer
-    except ImportError as e:  # pragma: no cover - import guarded
+    except ImportError as e:  # pragma: no cover
         raise ImportError(
             "sentence-transformers is required for make_sentence_transformer_embed; "
             "install with: pip install 'py-rag-engine[embeddings]'"

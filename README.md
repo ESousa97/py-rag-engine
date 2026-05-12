@@ -28,9 +28,27 @@ pip install pytest
 python -m pytest -q
 ```
 
+## Estrutura
+
+```text
+PY-RAG-ENGINE/
+├── src/
+│   └── py_rag_engine/
+│       ├── ingestion/
+│       ├── chunking/
+│       ├── embeddings/
+│       ├── retrieval/
+│       ├── domain.py
+│       └── vector_math.py
+├── tests/
+├── examples/
+├── data/
+└── docs/
+```
+
 ## Desenvolvimento
 
-- Código fonte em `internal/`.
+- Código fonte em `src/py_rag_engine/`.
 - Testes em `tests/`.
 
 ## Contribuindo
