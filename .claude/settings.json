@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip --version)",
+      "Bash(docker --version)",
+      "Bash(docker info *)",
+      "Bash(python -m pytest tests/test_postgres_storage.py -v)",
+      "Bash(pip install *)",
+      "Bash(docker run *)",
+      "Bash(docker rm *)",
+      "Bash(docker exec *)",
+      "Bash(TEST_POSTGRES_URL=\"postgresql+psycopg://rag:ragtest@localhost:55433/ragdb\" python scripts/practical_test_pgvector.py)",
+      "Bash(python -m pytest -q)"
+    ]
+  }
+}

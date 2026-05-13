@@ -23,7 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, insert as postgres_insert
 from sqlalchemy.engine import Engine
 
-DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+DEFAULT_EMBEDDING_MODEL = "openai-3-small"
 EMBEDDING_MODEL_DIMENSIONS = {
     "text-embedding-3-small": 1536,
     "openai-3-small": 1536,
@@ -130,7 +130,13 @@ class PostgresEmbeddingStore:
     ) -> None:
         self.engine = engine
         self.embedding_model = embedding_model
-        self.dimensions = dimensions or embedding_dimensions_for_model(embedding_model)
+        supported_dimensions = embedding_dimensions_for_model(embedding_model)
+        self.dimensions = dimensions or supported_dimensions
+        if self.dimensions != supported_dimensions:
+            raise ValueError(
+                f"Model '{embedding_model}' requires {supported_dimensions} dimensions, "
+                f"got {self.dimensions}"
+            )
         self.metadata = metadata if metadata is not None else MetaData()
         self.table = define_embeddings_table(
             metadata=self.metadata,
@@ -183,6 +189,8 @@ class PostgresEmbeddingStore:
         self._validate_embedding(query_embedding)
         if top_k < 1:
             raise ValueError("top_k must be greater than zero")
+        if ef_search is not None and ef_search < 1:
+            raise ValueError("ef_search must be greater than zero")
 
         distance = self.table.c.embedding.cosine_distance(bindparam("query_embedding")).label(
             "cosine_distance"
@@ -207,7 +215,7 @@ class PostgresEmbeddingStore:
 
         with self.engine.begin() as conn:
             if ef_search is not None:
-                conn.execute(sql_text("SET LOCAL hnsw.ef_search = :ef_search"), {"ef_search": ef_search})
+                conn.exec_driver_sql(f"SET LOCAL hnsw.ef_search = {int(ef_search)}")
             rows = conn.execute(statement, params).mappings()
             return [
                 SimilaritySearchResult(

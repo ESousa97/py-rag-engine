@@ -5,6 +5,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 
 from py_rag_engine.storage.postgres import (
+    DEFAULT_EMBEDDING_MODEL,
     EmbeddingInput,
     PostgresEmbeddingStore,
     define_embeddings_table,
@@ -13,6 +14,7 @@ from py_rag_engine.storage.postgres import (
 
 
 def test_embedding_dimensions_for_supported_models() -> None:
+    assert DEFAULT_EMBEDDING_MODEL == "openai-3-small"
     assert embedding_dimensions_for_model("text-embedding-3-small") == 1536
     assert embedding_dimensions_for_model("openai-3-small") == 1536
     assert embedding_dimensions_for_model("bge-m3") == 1024
@@ -44,8 +46,20 @@ def test_embeddings_table_uses_pgvector_jsonb_and_hnsw_cosine_index() -> None:
 
 
 def test_store_validates_embedding_dimensions() -> None:
-    store = PostgresEmbeddingStore(engine=object(), dimensions=3)  # type: ignore[arg-type]
+    store = PostgresEmbeddingStore(engine=object())  # type: ignore[arg-type]
     item = EmbeddingInput(text="x", embedding=[1.0, 2.0], content_hash="h")
 
-    with pytest.raises(ValueError, match="Expected embedding with 3 dimensions"):
+    with pytest.raises(ValueError, match="Expected embedding with 1536 dimensions"):
         store._row_from_input(item)
+
+
+def test_store_rejects_dimensions_that_do_not_match_model() -> None:
+    with pytest.raises(ValueError, match="requires 1536 dimensions"):
+        PostgresEmbeddingStore(engine=object(), dimensions=768)  # type: ignore[arg-type]
+
+
+def test_store_validates_ef_search() -> None:
+    store = PostgresEmbeddingStore(engine=object())  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="ef_search must be greater than zero"):
+        store.similarity_search([0.0] * 1536, ef_search=0)
