@@ -16,6 +16,9 @@ dependencies = [
     "langchain-text-splitters>=0.2.0",
     "pypdf>=4.0.0",
     "numpy>=1.24.0",
+    "pgvector>=0.4.0",
+    "psycopg[binary]>=3.2.0",
+    "SQLAlchemy>=2.0.0",
 ]
 
 [project.optional-dependencies]

@@ -80,6 +80,13 @@ Install optional embedding support when semantic chunking should use
 pip install -e ".[embeddings]"
 ```
 
+PostgreSQL persistence requires a database with the `pgvector` extension
+available. The Python dependencies are installed with the default package:
+
+```powershell
+pip install -e .
+```
+
 ## Download the Test PDF
 
 The Hugging Face endpoint returns dataset rows with signed PDF URLs:
@@ -232,6 +239,56 @@ payload = chunks_to_dicts(chunks)
 ]
 ```
 
+## PostgreSQL Vector Persistence
+
+The storage layer uses SQLAlchemy with PostgreSQL, JSONB metadata, and pgvector.
+It creates an `embeddings` table with a fixed vector dimension and an HNSW ANN
+index for cosine distance.
+
+Supported dimensions:
+
+- `text-embedding-3-small` or `openai-3-small`: 1536 dimensions.
+- `bge-m3`: 1024 dimensions.
+
+Example:
+
+```python
+from sqlalchemy import create_engine
+
+from py_rag_engine.storage import EmbeddingInput, PostgresEmbeddingStore
+
+engine = create_engine("postgresql+psycopg://rag:rag@localhost:5432/rag")
+store = PostgresEmbeddingStore(engine, embedding_model="openai-3-small")
+store.create_schema()
+
+store.add_embedding(
+    EmbeddingInput(
+        text="Original chunk text",
+        embedding=[0.0] * 1536,
+        metadata={"source": "examples/sample_hf.md", "page": None, "chunk_index": 0},
+        content_hash="chunk-sha256",
+    )
+)
+
+results = store.similarity_search([0.0] * 1536, top_k=5, ef_search=80)
+```
+
+`create_schema()` runs `CREATE EXTENSION IF NOT EXISTS vector`, creates the
+table, and creates these indexes:
+
+```sql
+CREATE INDEX ix_embeddings_embedding_hnsw_cosine
+ON embeddings USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+CREATE INDEX ix_embeddings_metadata_gin
+ON embeddings USING gin (metadata);
+```
+
+Similarity search orders by pgvector cosine distance and returns
+`cosine_similarity = 1 - cosine_distance`. Keep the `ORDER BY` and `LIMIT`
+pattern for PostgreSQL to use the HNSW ANN index.
+
 ## Testing
 
 Run the full test suite:
@@ -243,7 +300,7 @@ python -m pytest -q
 Expected result in the current project state:
 
 ```text
-12 passed
+16 passed
 ```
 
 Run a quick PDF ingestion check:
