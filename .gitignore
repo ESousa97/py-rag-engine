@@ -42,3 +42,6 @@ data/*.parquet
 data/*.arrow
 results/
 outputs/
+
+# Local model cache (HuggingFace clones)
+.cache/
