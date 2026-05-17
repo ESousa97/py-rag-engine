@@ -155,20 +155,3 @@ def chunks_to_dicts(chunks: Sequence[DocumentChunk]) -> list[dict[str, object]]:
     return [chunk.to_dict() for chunk in chunks]
 
 
-def make_sentence_transformer_embed(model_name: str) -> EmbeddingBatchFn:
-    """Create an embedding callback backed by a SentenceTransformer model."""
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError as e:  # pragma: no cover
-        raise ImportError(
-            "sentence-transformers is required for make_sentence_transformer_embed; "
-            "install with: pip install 'py-rag-engine[embeddings]'"
-        ) from e
-
-    model = SentenceTransformer(model_name)
-
-    def _embed(batch: list[str]) -> list[list[float]]:
-        vectors = model.encode(batch, convert_to_numpy=True, show_progress_bar=False)
-        return [list(map(float, row)) for row in vectors]
-
-    return _embed

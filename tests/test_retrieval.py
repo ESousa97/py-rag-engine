@@ -8,12 +8,12 @@ from py_rag_engine.domain import ChunkMetadata, DocumentChunk
 from py_rag_engine.retrieval import (
     CrossEncoderReranker,
     RerankedResult,
-    cosine_similarity,
     rank_chunks_by_similarity,
     rerank_candidates,
     retrieve_with_rerank,
 )
 from py_rag_engine.storage import SimilaritySearchResult
+from py_rag_engine.vector_math import cosine_similarity
 
 
 def test_cosine_similarity_basic() -> None:

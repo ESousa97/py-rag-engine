@@ -9,7 +9,6 @@ from py_rag_engine.ingestion.pipeline import (
     deduplicate_chunks,
     ingest_file,
     ingest_path,
-    make_sentence_transformer_embed,
 )
 
 __all__ = [
@@ -22,6 +21,5 @@ __all__ = [
     "load_markdown",
     "load_pdf",
     "make_recursive_splitter",
-    "make_sentence_transformer_embed",
     "split_text_recursive",
 ]

@@ -50,44 +50,69 @@ py-rag-engine/
 ├── .cache/                              # local model cache (gitignored)
 │   └── ms-marco-MiniLM-L-6-v2/         # Cross-Encoder cloned from HuggingFace
 ├── data/
-│   ├── gdp_document_0.metadata.json     # lightweight chunk metadata (versioned)
-│   ├── gdp_first_rows.json              # Hugging Face first-rows response
+│   ├── eval_document.md                 # source doc for RAGAS evaluation
+│   ├── eval_questions.json              # 10 gold-standard Q&A pairs (schema v1)
+│   ├── gdp_document_0.metadata.json     # demo PDF chunk metadata
+│   ├── gdp_first_rows.json              # HF first-rows sample
 │   └── hf_rows.json                     # Markdown dataset sample
 ├── docs/
-│   └── architecture.md
+│   ├── architecture.md                  # module map + pipeline diagram
+│   └── evaluation.md                    # RAGAS metrics, modes, report schema
 ├── examples/
 │   └── sample_hf.md
+├── reports/                             # eval_report_<UTC>.json (gitignored)
 ├── scripts/
-│   ├── demo_rerank.py                   # end-to-end E2E demo (ingest→embed→store→rerank)
-│   └── process_document.py             # CLI for PDF/Markdown chunk processing
+│   ├── demo_rerank.py                   # E2E demo (ingest→embed→store→rerank)
+│   ├── eval_ragas.py                    # offline RAGAS CLI (thin wrapper)
+│   └── process_document.py              # CLI for PDF/Markdown chunk processing
 ├── src/
 │   └── py_rag_engine/
+│       ├── __init__.py
+│       ├── config.py                    # LMStudioConfig / PostgresConfig / EvalConfig
+│       ├── domain.py                    # DocumentChunk + ChunkMetadata
+│       ├── vector_math.py               # numpy cosine similarity
 │       ├── chunking/
-│       │   ├── recursive.py            # recursive splitter and dynamic overlap
-│       │   └── semantic.py             # embedding-based semantic splitting
+│       │   ├── recursive.py             # recursive splitter and dynamic overlap
+│       │   └── semantic.py              # embedding-based semantic splitting
+│       ├── clients/
+│       │   └── lm_studio.py             # LMStudioClient + detect_chat_model
 │       ├── embeddings/
-│       │   └── hashing.py              # SHA-256 content hash helpers
+│       │   ├── hashing.py               # SHA-256 content hash helpers
+│       │   ├── lm_studio_embedder.py    # make_lm_studio_embed(client)
+│       │   └── sentence_transformer.py  # make_sentence_transformer_embed(model)
+│       ├── evaluation/
+│       │   ├── dataset.py               # load_gold_standard(JSON path)
+│       │   ├── metrics.py               # faithfulness / answer_relevancy / context_precision
+│       │   ├── ragas_official.py        # optional official-library path with fallback
+│       │   └── runner.py                # EvalRunner + build_summary
+│       ├── generation/
+│       │   └── lm_studio_chat.py        # generate_answer grounded in context
 │       ├── ingestion/
-│       │   ├── loaders.py              # PDF and Markdown loaders
-│       │   └── pipeline.py             # ingestion orchestration
+│       │   ├── loaders.py               # PDF and Markdown loaders
+│       │   └── pipeline.py              # ingest_file / ingest_path
 │       ├── retrieval/
-│       │   ├── rerank.py               # CrossEncoderReranker + rerank_candidates
-│       │   ├── semantic.py             # cosine_similarity helper
-│       │   └── service.py              # rank_chunks_by_similarity + retrieve_with_rerank
-│       ├── storage/
-│       │   └── postgres.py             # PostgresEmbeddingStore (pgvector)
-│       ├── domain.py                   # DocumentChunk and ChunkMetadata
-│       └── vector_math.py              # numpy cosine similarity
+│       │   ├── rerank.py                # CrossEncoderReranker + rerank_candidates
+│       │   └── service.py               # rank_chunks_by_similarity + retrieve_with_rerank
+│       └── storage/
+│           └── postgres.py              # PostgresEmbeddingStore (pgvector)
 ├── tests/
 │   ├── test_chunking.py
+│   ├── test_config.py                   # env loading + dataclass defaults
 │   ├── test_embeddings.py
+│   ├── test_evaluation.py               # dataset loader + metrics + runner helpers
+│   ├── test_generation.py               # prompt assembly + chat dispatch
 │   ├── test_ingestion.py
-│   ├── test_postgres_integration.py    # requires TEST_POSTGRES_URL + LM_STUDIO_BASE_URL
+│   ├── test_lm_studio_client.py         # HTTP retry + auto-detect
+│   ├── test_postgres_integration.py     # requires TEST_POSTGRES_URL + LM_STUDIO_BASE_URL
 │   ├── test_postgres_storage.py
-│   └── test_retrieval.py               # includes re-ranking unit tests
+│   └── test_retrieval.py
 ├── pyproject.toml
 └── README.md
 ```
+
+Each module has one responsibility; scripts are CLI thin-wrappers that
+compose the library. See [docs/architecture.md](docs/architecture.md) for
+the full module map and pipeline diagram.
 
 ---
 
@@ -95,11 +120,12 @@ py-rag-engine/
 
 | Requirement | Version tested | Notes |
 |---|---|---|
-| Python | 3.11 / 3.12 / 3.14 | 3.11+ required |
+| Python | 3.11 / 3.12 / 3.14 | `>=3.10` per `pyproject.toml` |
 | PostgreSQL + pgvector | pg16 + pgvector 0.8.2 | via Docker (see below) |
-| LM Studio | any | exposes `/v1/embeddings` on `localhost:1234` |
-| Model `gpustack/bge-m3-GGUF` | bge-m3-Q8_0 | loaded inside LM Studio |
-| sentence-transformers | 5.4.1 | for Cross-Encoder re-ranking |
+| LM Studio | any | OpenAI-compatible server on `localhost:1234` |
+| Embedding model | `gpustack/bge-m3-GGUF` (bge-m3-Q8_0) | 1024d, multilingual |
+| Chat model (for eval) | `Qwen/Qwen2.5-7B-Instruct-GGUF` Q4_K_M | ~4.7 GB, recommended for 12 GB GPUs |
+| sentence-transformers | 5.4.x | Cross-Encoder re-ranking + local embeddings |
 | Git LFS | any | to clone the Cross-Encoder weights |
 
 ---
@@ -123,14 +149,19 @@ The `[embeddings]` extra installs `sentence-transformers`, which provides both
 ### 1. PostgreSQL + pgvector via Docker
 
 The easiest way to get a pgvector-enabled PostgreSQL is to run the official
-`pgvector/pgvector` Docker image.
+`pgvector/pgvector` Docker image. Set the DB password in your shell once,
+then reuse it from the environment — **never commit it to a file**:
 
 ```powershell
+$env:POSTGRES_PASSWORD = "<choose-a-strong-password>"
+$env:POSTGRES_DB       = "rag"
+$env:POSTGRES_PORT     = "5434"          # host port to expose
+
 docker run -d `
   --name rag-pgvector `
-  -e POSTGRES_PASSWORD=[passowrd] `
-  -e POSTGRES_DB=rag `
-  -p 5434:5432 `
+  -e POSTGRES_PASSWORD=$env:POSTGRES_PASSWORD `
+  -e POSTGRES_DB=$env:POSTGRES_DB `
+  -p "$($env:POSTGRES_PORT):5432" `
   pgvector/pgvector:pg16
 ```
 
@@ -141,11 +172,15 @@ docker exec rag-pgvector pg_isready -U postgres
 # output: /var/run/postgresql:5432 - accepting connections
 ```
 
-Connection string used throughout this project:
+The scripts read the connection settings from the environment.
+You can either set a full DSN once:
 
+```powershell
+$env:EVAL_POSTGRES_URL = "postgresql+psycopg://postgres:$env:POSTGRES_PASSWORD@localhost:$env:POSTGRES_PORT/$env:POSTGRES_DB"
 ```
-postgresql+psycopg://postgres:[password]@localhost:5434/rag
-```
+
+…or rely on the standard `POSTGRES_*` parts (`POSTGRES_PASSWORD` is
+required; the rest fall back to `postgres` / `localhost` / `5432` / `rag`).
 
 To stop and remove the container when done:
 
@@ -154,20 +189,27 @@ docker stop rag-pgvector
 docker rm rag-pgvector
 ```
 
-### 2. LM Studio — Embedding Model
+### 2. LM Studio — Embedding Model & Chat Model
 
 1. Download and install [LM Studio](https://lmstudio.ai).
-2. Download model **`gpustack/bge-m3-GGUF`** (file `bge-m3-Q8_0.gguf`, ~600 MB).
-3. Go to **Developer → Local Server**, select the model, and click **Start Server**.
-4. The server exposes `http://localhost:1234/v1/embeddings`.
+2. Download the **embedding** model `gpustack/bge-m3-GGUF` (file `bge-m3-Q8_0.gguf`, ~600 MB).
+3. Download the **chat** model used by the offline RAGAS evaluation. On a
+   12 GB GPU (e.g. RTX 3060) the recommended pick is:
+   - `Qwen/Qwen2.5-7B-Instruct-GGUF` → `qwen2.5-7b-instruct-q4_k_m.gguf` (~4.7 GB),
+     or the equivalent `bartowski/Qwen2.5-7B-Instruct-GGUF`.
+   - **Avoid** 13B+ models — they OOM when loaded alongside `bge-m3` and the
+     Cross-Encoder, producing `WinError 10054` mid-eval.
+4. Go to **Developer → Local Server**, load **both** models (enable JIT
+   loading or pre-load manually), then click **Start Server**.
+5. The server exposes `http://localhost:1234/v1/{embeddings,chat/completions,models}`.
 
 Verify the server is up:
 
 ```powershell
-Invoke-RestMethod http://localhost:1234/v1/models | ConvertTo-Json
+Invoke-RestMethod http://localhost:1234/v1/models | Select-Object -ExpandProperty data | Format-Table id
 ```
 
-Expected response includes `"id": "text-embedding-bge-m3"`.
+Expected output includes both `text-embedding-bge-m3` and `qwen2.5-7b-instruct`.
 
 ### 3. Cross-Encoder Model (local download)
 
@@ -211,10 +253,14 @@ the dense pgvector search.
 ### Environment variables
 
 ```powershell
-$env:PYTHONPATH              = "src"
-$env:LM_STUDIO_BASE_URL      = "http://localhost:1234"
+$env:PYTHONPATH                = "src"
+$env:LM_STUDIO_BASE_URL        = "http://localhost:1234"
 $env:LM_STUDIO_EMBEDDING_MODEL = "text-embedding-bge-m3"
-$env:DEMO_POSTGRES_URL       = "postgresql+psycopg://postgres:[password]@localhost:5434/rag"
+
+# Either set the full DSN…
+$env:DEMO_POSTGRES_URL = "postgresql+psycopg://postgres:$env:POSTGRES_PASSWORD@localhost:5434/rag"
+# …or rely on POSTGRES_PASSWORD (+ optional POSTGRES_USER/HOST/PORT/DB) set
+# earlier in the shell. The script never embeds credentials.
 ```
 
 ### Run
@@ -250,7 +296,7 @@ vector_dim        = 1024
 ==============================================================================
 3) PERSIST (PostgreSQL + pgvector)
 ==============================================================================
-postgres_url      = postgresql+psycopg://postgres:[password]@localhost:5434/rag
+postgres_url      = postgresql+psycopg://postgres:***@localhost:5434/rag
 storage_model     = bge-m3
 rows_upserted     = 50
 
@@ -321,6 +367,69 @@ different signals (semantic proximity vs. precise relevance).
 
 ---
 
+## Offline RAGAS Evaluation
+
+[scripts/eval_ragas.py](scripts/eval_ragas.py) runs the full pipeline against a
+10-question gold-standard set and writes a JSON report comparing chunk sizes
+and embedding models. Three RAGAS metrics are computed per question:
+
+- **Faithfulness** — fraction of answer claims entailed by the retrieved context
+- **Answer Relevancy** — cosine sim between the question and a reverse-generated
+  question derived from the answer
+- **Context Precision** — fraction of retrieved chunks judged useful by the LLM
+
+The metrics follow the definitions in the original RAGAS paper. By default the
+script uses a manual implementation that talks to LM Studio over plain HTTP —
+this avoids the `n>1` and tool-input limitations of the `langchain-openai`
+stack. Set `EVAL_USE_OFFICIAL_RAGAS=1` to try the official `ragas` library
+first (the script falls back automatically if it fails).
+
+### Setup
+
+Install the eval extra and start the LM Studio server with **both** models
+loaded (see "LM Studio — Embedding Model & Chat Model" above):
+
+```powershell
+pip install -e ".[eval]"
+docker start rag-pgvector
+```
+
+### Run modes
+
+| Mode | Env var | Configs × Questions | Wall time¹ |
+|---|---|---|---|
+| Smoke (sanity check) | `EVAL_SMOKE=1` | 1 × 1 | ~30 s |
+| Quick (single model, 3 Qs) | `EVAL_QUICK=1 EVAL_SKIP_MINILM=1` | 3 × 3 | ~3 min |
+| Full single-model | `EVAL_SKIP_MINILM=1` | 3 × 10 | ~8 min |
+| Full comparison | _(no flags)_ | 6 × 10 | ~15 min |
+
+¹ Qwen2.5-7B-Instruct Q4_K_M on RTX 3060 12 GB.
+
+### Run (PowerShell)
+
+```powershell
+$env:PYTHONPATH        = "src"
+
+# Provide credentials via the standard POSTGRES_* parts (or a full DSN in
+# $env:EVAL_POSTGRES_URL). No credential lives in the code or the report.
+$env:POSTGRES_PASSWORD = "<your-password>"
+$env:POSTGRES_PORT     = "5434"        # match the docker run above
+
+# Smoke test first
+$env:EVAL_SMOKE = "1"
+python scripts\eval_ragas.py
+
+# Then a full run
+Remove-Item Env:\EVAL_SMOKE
+python scripts\eval_ragas.py
+```
+
+The JSON report lands in `reports/eval_report_<UTC-timestamp>.json` with
+per-question scores, per-config averages, and an `overall_ranking` block that
+ranks configurations by mean score across all three metrics.
+
+---
+
 ## Usage
 
 ### Document Ingestion
@@ -344,9 +453,10 @@ metadata_output=data\gdp_document_0.metadata.json
 ```powershell
 $env:PYTHONPATH = 'src'
 python -c "
-from py_rag_engine.ingestion import ingest_file, make_sentence_transformer_embed
+from py_rag_engine.embeddings import make_sentence_transformer_embed
+from py_rag_engine.ingestion import ingest_file
 embed = make_sentence_transformer_embed('all-MiniLM-L6-v2')
-chunks = ingest_file('examples/sample_hf.md', use_semantic_chunking=True, embed=embed)
+chunks = ingest_file('data/eval_document.md', use_semantic_chunking=True, embed=embed)
 print(len(chunks))
 "
 ```
@@ -380,10 +490,13 @@ payload = chunks_to_dicts(chunks)
 
 ```python
 from sqlalchemy import create_engine
+from py_rag_engine.config import PostgresConfig
 from py_rag_engine.storage import EmbeddingInput, PostgresEmbeddingStore
 
-engine = create_engine("postgresql+psycopg://postgres:[password]@localhost:5434/rag")
-store = PostgresEmbeddingStore(engine, embedding_model="bge-m3")
+# Pulls the DSN from EVAL_POSTGRES_URL or the POSTGRES_* env parts.
+# Raises RuntimeError if no credentials are available — never hardcoded.
+engine = create_engine(PostgresConfig.from_env().url)
+store  = PostgresEmbeddingStore(engine, embedding_model="bge-m3")
 store.create_schema()
 
 store.add_embedding(
@@ -417,20 +530,108 @@ Supported embedding models and dimensions:
 |---|---|
 | `bge-m3` | 1024 |
 | `openai-3-small` / `text-embedding-3-small` | 1536 |
+| `all-MiniLM-L6-v2` / `all-minilm-l6-v2` | 384 |
+
+### LM Studio Client
+
+```python
+from py_rag_engine.clients import LMStudioClient, detect_chat_model
+from py_rag_engine.config import LMStudioConfig
+
+client = LMStudioClient(LMStudioConfig.from_env())     # reads LM_STUDIO_* env vars
+
+# Sanity: list models and pick a 7-8B chat model
+chat = detect_chat_model(client)
+print(chat)                                            # e.g. "qwen2.5-7b-instruct"
+
+# Warm the LLM into VRAM before a long eval loop
+client.warm_up_chat(chat)
+
+# Embed
+vectors = client.embed(["hello", "world"])             # 64-batch by default
+
+# Chat
+answer = client.chat(
+    [{"role": "user", "content": "Reply OK."}],
+    model=chat, temperature=0.0, max_tokens=5,
+)
+```
+
+Retries (`OSError`, `WinError 10054`, malformed JSON) and exponential backoff
+are tuned via `LMStudioConfig.retries` and `LMStudioConfig.backoff`. Inject a
+fake `http_json` argument for tests.
+
+### Grounded Answer Generation
+
+```python
+from py_rag_engine.generation import generate_answer
+
+answer = generate_answer(
+    client,
+    question="What is HNSW?",
+    contexts=["[1] HNSW is a graph-based ANN algorithm.", "[2] Its key knobs are m, ef_construction, ef_search."],
+    chat_model="qwen2.5-7b-instruct",
+)
+```
+
+### Offline Evaluation
+
+```python
+from sqlalchemy import create_engine
+from py_rag_engine.config import LMStudioConfig, PostgresConfig
+from py_rag_engine.clients import LMStudioClient
+from py_rag_engine.embeddings import make_lm_studio_embed
+from py_rag_engine.evaluation import EvalRunner, build_summary, load_gold_standard
+
+client = LMStudioClient(LMStudioConfig.from_env())
+engine = create_engine(PostgresConfig.from_env().url)
+gold   = load_gold_standard("data/eval_questions.json")
+
+runner = EvalRunner(
+    client=client,
+    config=client.config,
+    engine=engine,
+    chat_model="qwen2.5-7b-instruct",
+)
+
+result = runner.run(
+    config_id="bge-m3_chunk1024",
+    embed_label="BGE-M3 via LM Studio",
+    embedding_model="bge-m3",
+    chunk_size=1024,
+    embed_fn=make_lm_studio_embed(client),
+    document_path="data/eval_document.md",
+    questions=gold,
+)
+print(result.metrics)
+# {'faithfulness': 0.82, 'answer_relevancy': 0.79, 'context_precision': 0.85, 'mean_retrieval_similarity': 0.61}
+```
+
+See [docs/evaluation.md](docs/evaluation.md) for the full metric definitions,
+run modes, and report schema.
 
 ### Re-ranking Pipeline
 
 ```python
+import os
+from pathlib import Path
+
 from sqlalchemy import create_engine
+
+from py_rag_engine.config import PostgresConfig
 from py_rag_engine.retrieval import CrossEncoderReranker, retrieve_with_rerank
 from py_rag_engine.storage import PostgresEmbeddingStore
 
-engine = create_engine("postgresql+psycopg://postgres:[password]@localhost:5434/rag")
-store = PostgresEmbeddingStore(engine, embedding_model="bge-m3")
+engine = create_engine(PostgresConfig.from_env().url)
+store  = PostgresEmbeddingStore(engine, embedding_model="bge-m3")
 
-# Model name or local absolute path
+# Model name (downloaded by sentence-transformers) or a path from env.
+# Avoid hardcoding absolute paths — they aren't portable.
 reranker = CrossEncoderReranker(
-    model_name="/absolute/path/to/.cache/ms-marco-MiniLM-L-6-v2"
+    model_name=os.environ.get(
+        "RERANKER_MODEL_PATH",
+        "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    ),
 )
 
 results = retrieve_with_rerank(
@@ -480,7 +681,7 @@ python -m pytest -q
 ```
 
 ```text
-27 passed, 1 skipped
+49 passed, 1 skipped
 ```
 
 The skipped test is `tests/test_postgres_integration.py`, which requires a
@@ -489,18 +690,19 @@ real Postgres instance and LM Studio.
 ### Integration test (full round-trip)
 
 Set environment variables pointing to a running Postgres and LM Studio, then
-run the full suite:
+run the full suite. The password comes from the shell — never the source tree:
 
 ```powershell
-$env:TEST_POSTGRES_URL        = "postgresql+psycopg://postgres:[password]@localhost:5434/rag"
-$env:LM_STUDIO_BASE_URL       = "http://localhost:1234"
+$env:POSTGRES_PASSWORD         = "<your-password>"
+$env:TEST_POSTGRES_URL         = "postgresql+psycopg://postgres:$env:POSTGRES_PASSWORD@localhost:5434/rag"
+$env:LM_STUDIO_BASE_URL        = "http://localhost:1234"
 $env:LM_STUDIO_EMBEDDING_MODEL = "text-embedding-bge-m3"
 $env:STORAGE_EMBEDDING_MODEL   = "bge-m3"
 python -m pytest -q
 ```
 
 ```text
-28 passed
+50 passed
 ```
 
 The integration test (`test_lm_studio_embeddings_round_trip_through_postgres_pgvector`)
@@ -511,19 +713,32 @@ similarity query, and asserts that the HNSW index is present.
 
 ## Development
 
+Library modules grouped by responsibility:
+
 | Module | Purpose |
 |---|---|
-| `src/py_rag_engine/domain.py` | `DocumentChunk`, `ChunkMetadata` |
-| `src/py_rag_engine/ingestion/pipeline.py` | Ingest orchestration |
-| `src/py_rag_engine/ingestion/loaders.py` | PDF and Markdown loaders |
-| `src/py_rag_engine/chunking/recursive.py` | Recursive splitter and dynamic overlap |
-| `src/py_rag_engine/chunking/semantic.py` | Embedding-based topic splitting |
-| `src/py_rag_engine/embeddings/hashing.py` | SHA-256 content hashing |
-| `src/py_rag_engine/storage/postgres.py` | `PostgresEmbeddingStore`, pgvector |
-| `src/py_rag_engine/retrieval/rerank.py` | `CrossEncoderReranker`, `rerank_candidates` |
-| `src/py_rag_engine/retrieval/service.py` | `retrieve_with_rerank` pipeline |
-| `src/py_rag_engine/vector_math.py` | `cosine_similarity` (numpy) |
-| `scripts/demo_rerank.py` | E2E demo script |
+| `config.py` | `LMStudioConfig` / `PostgresConfig` / `EvalConfig` (env-driven) |
+| `clients/lm_studio.py` | `LMStudioClient` HTTP wrapper + `detect_chat_model` |
+| `domain.py` | `DocumentChunk`, `ChunkMetadata` |
+| `vector_math.py` | `cosine_similarity` (numpy) |
+| `ingestion/pipeline.py` | Ingest orchestration (`ingest_file`, `ingest_path`) |
+| `ingestion/loaders.py` | PDF and Markdown loaders |
+| `chunking/recursive.py` | Recursive splitter and dynamic overlap |
+| `chunking/semantic.py` | Embedding-based topic splitting |
+| `embeddings/hashing.py` | SHA-256 content hashing |
+| `embeddings/lm_studio_embedder.py` | `make_lm_studio_embed(client)` |
+| `embeddings/sentence_transformer.py` | `make_sentence_transformer_embed(model)` |
+| `storage/postgres.py` | `PostgresEmbeddingStore`, pgvector HNSW |
+| `retrieval/rerank.py` | `CrossEncoderReranker`, `rerank_candidates` |
+| `retrieval/service.py` | `retrieve_with_rerank` pipeline |
+| `generation/lm_studio_chat.py` | `generate_answer` grounded in context |
+| `evaluation/dataset.py` | `load_gold_standard(JSON)` |
+| `evaluation/metrics.py` | Faithfulness / answer_relevancy / context_precision |
+| `evaluation/ragas_official.py` | Optional official-library adapter |
+| `evaluation/runner.py` | `EvalRunner`, `build_summary`, `safe_table_name` |
+| `scripts/demo_rerank.py` | E2E demo CLI |
+| `scripts/eval_ragas.py` | Offline RAGAS CLI |
+| `scripts/process_document.py` | Standalone chunking CLI |
 
 ---
 

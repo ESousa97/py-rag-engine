@@ -18,9 +18,13 @@ dist/
 venv/
 ENV/
 env/
+eval_venv/
 
 # Pytest
 .pytest_cache/
+
+# Ruff
+.ruff_cache/
 
 # Editor directories
 .vscode/
@@ -42,6 +46,7 @@ data/*.parquet
 data/*.arrow
 results/
 outputs/
+reports/
 
 # Local model cache (HuggingFace clones)
 .cache/

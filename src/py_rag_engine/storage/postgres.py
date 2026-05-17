@@ -28,6 +28,8 @@ EMBEDDING_MODEL_DIMENSIONS = {
     "text-embedding-3-small": 1536,
     "openai-3-small": 1536,
     "bge-m3": 1024,
+    "all-MiniLM-L6-v2": 384,
+    "all-minilm-l6-v2": 384,
 }
 
 
@@ -70,14 +72,16 @@ def define_embeddings_table(
     embedding_model: str = DEFAULT_EMBEDDING_MODEL,
     hnsw_m: int = 16,
     hnsw_ef_construction: int = 64,
+    table_name: str = "embeddings",
 ) -> Table:
-    """Define the PostgreSQL embeddings table with a pgvector HNSW cosine index."""
+    """Define a PostgreSQL embeddings table with a pgvector HNSW cosine index."""
     if dimensions is None:
         dimensions = embedding_dimensions_for_model(embedding_model)
 
     table_metadata = metadata if metadata is not None else MetaData()
+    t = table_name  # short alias for name derivation
     table = Table(
-        "embeddings",
+        table_name,
         table_metadata,
         Column("id", BigInteger, primary_key=True, autoincrement=True),
         Column("embedding_model", String(64), nullable=False),
@@ -103,17 +107,17 @@ def define_embeddings_table(
             server_default=func.now(),
             onupdate=func.now(),
         ),
-        UniqueConstraint("embedding_model", "content_hash", name="uq_embeddings_model_hash"),
+        UniqueConstraint("embedding_model", "content_hash", name=f"uq_{t}_model_hash"),
     )
 
     Index(
-        "ix_embeddings_embedding_hnsw_cosine",
+        f"ix_{t}_embedding_hnsw_cosine",
         table.c.embedding,
         postgresql_using="hnsw",
         postgresql_with={"m": hnsw_m, "ef_construction": hnsw_ef_construction},
         postgresql_ops={"embedding": "vector_cosine_ops"},
     )
-    Index("ix_embeddings_metadata_gin", table.c.metadata, postgresql_using="gin")
+    Index(f"ix_{t}_metadata_gin", table.c.metadata, postgresql_using="gin")
     return table
 
 
@@ -127,6 +131,7 @@ class PostgresEmbeddingStore:
         dimensions: int | None = None,
         embedding_model: str = DEFAULT_EMBEDDING_MODEL,
         metadata: MetaData | None = None,
+        table_name: str = "embeddings",
     ) -> None:
         self.engine = engine
         self.embedding_model = embedding_model
@@ -142,6 +147,7 @@ class PostgresEmbeddingStore:
             metadata=self.metadata,
             dimensions=self.dimensions,
             embedding_model=embedding_model,
+            table_name=table_name,
         )
 
     def create_schema(self) -> None:
@@ -164,7 +170,7 @@ class PostgresEmbeddingStore:
         statement = postgres_insert(self.table).values(rows)
         if upsert:
             statement = statement.on_conflict_do_update(
-                constraint="uq_embeddings_model_hash",
+                index_elements=[self.table.c.embedding_model, self.table.c.content_hash],
                 set_={
                     "embedding": statement.excluded.embedding,
                     "text": statement.excluded.text,

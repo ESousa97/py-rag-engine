@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "description": "Gold-standard Q&A pairs derived from data/eval_document.md, covering Retrieval-Augmented Generation core concepts. Used by scripts/eval_ragas.py.",
+  "source_document": "data/eval_document.md",
+  "questions": [
+    {
+      "id": "rag-definition",
+      "question": "What is Retrieval-Augmented Generation?",
+      "ground_truth": "Retrieval-Augmented Generation (RAG) is an AI architecture that combines large language models with external knowledge retrieval. When a user asks a question the system first retrieves relevant documents from a knowledge base, then uses those documents as context to generate a response, which reduces hallucination and keeps answers factually grounded."
+    },
+    {
+      "id": "rag-components",
+      "question": "What are the three primary components of a RAG pipeline?",
+      "ground_truth": "The three primary components are: the Retriever (finds relevant documents using vector embeddings and ANN search), the Vector Database (stores precomputed embeddings for fast similarity search using structures like HNSW), and the Generator (an LLM that uses retrieved documents as context to produce grounded answers)."
+    },
+    {
+      "id": "chunk-size",
+      "question": "What chunk size is recommended for most documents in recursive text splitting?",
+      "ground_truth": "A chunk size of 512 to 1024 characters is recommended for most use cases, balancing between too-broad context that introduces noise and too-narrow context that loses important surrounding information. Larger documents with long structured sections may benefit from chunk sizes up to 2048 characters."
+    },
+    {
+      "id": "bi-vs-cross-encoder",
+      "question": "What is the key difference between a bi-encoder and a cross-encoder?",
+      "ground_truth": "A bi-encoder independently encodes the query and documents into fixed-size vectors, which allows document embeddings to be precomputed — making retrieval fast. A cross-encoder processes the query and document together in a single forward pass, capturing richer token-level interactions and achieving higher accuracy, but it cannot precompute document embeddings so it is too slow for first-stage retrieval over large corpora."
+    },
+    {
+      "id": "faithfulness",
+      "question": "What does faithfulness measure in the RAGAS evaluation framework?",
+      "ground_truth": "Faithfulness measures whether the generated answer is factually consistent with the retrieved context. It decomposes the answer into individual factual statements and checks whether each can be inferred from the context. A score of 1 means every statement is supported; a low score indicates hallucination. It is the most critical metric for production RAG systems."
+    },
+    {
+      "id": "context-precision",
+      "question": "What does context precision measure in RAGAS?",
+      "ground_truth": "Context precision measures the signal-to-noise ratio of the retrieved passages. A high score means most retrieved chunks are relevant to the question, while a low score means many irrelevant chunks were retrieved alongside the relevant ones. Irrelevant context can dilute the useful signal and mislead the generator into producing off-topic answers."
+    },
+    {
+      "id": "chunk-overlap",
+      "question": "What is the purpose of chunk overlap in text splitting?",
+      "ground_truth": "Chunk overlap ensures that information at chunk boundaries is not lost. A typical overlap ratio is 10 to 15 percent of the chunk size. For example, a 1024-character chunk would have approximately 100 to 150 characters of overlap with adjacent chunks. The end of one chunk reappears at the beginning of the next, preserving context that would otherwise be split between two separate chunks."
+    },
+    {
+      "id": "hnsw",
+      "question": "What is HNSW and what are its three key parameters?",
+      "ground_truth": "HNSW (Hierarchical Navigable Small World) is a graph-based approximate nearest-neighbor algorithm used by vector databases. Its three key parameters are: m (the number of bidirectional connections per node, default 16, controlling memory vs recall trade-off), ef_construction (candidate list size during index build, default 64, controlling build quality vs speed), and ef_search (candidate list size during query, controlling query recall vs latency at query time)."
+    },
+    {
+      "id": "rag-limitations",
+      "question": "What are the main limitations of RAG systems?",
+      "ground_truth": "The main limitations of RAG systems are: retrieval failures where a missed document creates a hard ceiling on answer quality; context window constraints that may require truncating retrieved content; multi-hop reasoning challenges when information spans disconnected documents; increased end-to-end latency from the retrieval step; out-of-date knowledge if the knowledge base is not regularly updated; and chunking artifacts that split important context across multiple chunks."
+    },
+    {
+      "id": "two-stage-retrieval",
+      "question": "How does two-stage retrieval with re-ranking work?",
+      "ground_truth": "Two-stage retrieval first uses a fast bi-encoder to retrieve a large candidate set (typically top 20 to 50 documents) prioritising recall, then uses a slower but more accurate cross-encoder to re-score and re-rank those candidates and select the final top-k (typically top 3 to 5). Because the cross-encoder only scores a small candidate set, not the entire corpus, it remains computationally feasible. The ms-marco-MiniLM-L-6-v2 model is widely used for re-ranking due to its accuracy-to-speed balance."
+    }
+  ]
+}

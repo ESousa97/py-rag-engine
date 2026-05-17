@@ -25,6 +25,16 @@ dependencies = [
 embeddings = [
     "sentence-transformers>=2.2.0",
 ]
+eval = [
+    "sentence-transformers>=2.2.0",
+    # Optional: the script ships a manual RAGAS-equivalent implementation that
+    # works against LM Studio out of the box. Set EVAL_USE_OFFICIAL_RAGAS=1 to
+    # try the official library first, with automatic fallback to manual.
+    "ragas>=0.2",
+    "langchain-openai>=0.1",
+    "datasets>=2.0",
+    "pandas>=2.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/py_rag_engine"]

@@ -8,8 +8,8 @@ from py_rag_engine.retrieval.rerank import (
     CrossEncoderReranker,
     RerankedResult,
 )
-from py_rag_engine.retrieval.semantic import cosine_similarity
 from py_rag_engine.storage import PostgresEmbeddingStore
+from py_rag_engine.vector_math import cosine_similarity
 
 DEFAULT_CANDIDATE_K = 20
 DEFAULT_TOP_K = 5
