@@ -32,11 +32,20 @@ DEFAULT_FTS_LANGUAGE = "english"
 _FTS_LANG_RE = re.compile(r"^[a-z_][a-z0-9_]*$", re.IGNORECASE)
 
 EMBEDDING_MODEL_DIMENSIONS = {
+    # OpenAI / LM Studio aliases
     "text-embedding-3-small": 1536,
     "openai-3-small": 1536,
+    # BGE-M3 — also the default LM Studio embed model
     "bge-m3": 1024,
+    "text-embedding-bge-m3": 1024,
+    # MiniLM
     "all-MiniLM-L6-v2": 384,
     "all-minilm-l6-v2": 384,
+    # Nomic
+    "nomic-embed-text-v1": 768,
+    "nomic-embed-text-v1.5": 768,
+    # MixedBread
+    "mxbai-embed-large-v1": 1024,
 }
 
 
