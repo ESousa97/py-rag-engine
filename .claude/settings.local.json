@@ -75,7 +75,9 @@
       "Bash(PYTHONPATH=src \"C:/Users/sousa/AppData/Local/Programs/Python/Python314/python.exe\" -m ruff check --select ALL --ignore D,ANN,COM,EM,FBT,TRY003,PLR,N999,N802,N818,RET504,SIM108,SIM117,S101,S603,S607,T201,UP,RUF002,RUF003,RUF012,W291,W292,W293,E501,Q000,I001,PLW0603,A002,A003,PLR0913,BLE001,PT,FA100,DTZ005,DTZ003,ARG001,ARG002,ANN101,ANN102 src/ scripts/ tests/)",
       "Bash(PYTHONPATH=src \"C:/Users/sousa/AppData/Local/Programs/Python/Python314/python.exe\" -m ruff check src/ scripts/ tests/)",
       "Bash(git fetch *)",
-      "Bash(git rev-list *)"
+      "Bash(git rev-list *)",
+      "Bash(xargs grep -l \"tsvector\\\\|tsquery\\\\|fts\\\\|full.text\\\\|search\")",
+      "Bash(python *)"
     ]
   }
 }

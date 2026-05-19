@@ -4,6 +4,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from py_rag_engine.domain import DocumentChunk
+from py_rag_engine.retrieval.hybrid import (
+    DEFAULT_DENSE_K,
+    DEFAULT_FTS_K,
+    DEFAULT_HYBRID_TOP_K,
+    DEFAULT_RRF_K,
+    retrieve_hybrid,
+)
 from py_rag_engine.retrieval.rerank import (
     CrossEncoderReranker,
     RerankedResult,
@@ -65,3 +72,39 @@ def retrieve_with_rerank(
         ef_search=ef_search,
     )
     return reranker.rerank(query, candidates, top_k=top_k)
+
+
+def retrieve_hybrid_with_rerank(
+    query: str,
+    query_embedding: Sequence[float],
+    store: PostgresEmbeddingStore,
+    reranker: CrossEncoderReranker,
+    *,
+    dense_k: int = DEFAULT_DENSE_K,
+    fts_k: int = DEFAULT_FTS_K,
+    top_k: int = DEFAULT_HYBRID_TOP_K,
+    rrf_k: int = DEFAULT_RRF_K,
+    metadata_filter: Mapping[str, Any] | None = None,
+    ef_search: int | None = None,
+) -> list[RerankedResult]:
+    """Hybrid retrieval (dense + FTS fused with RRF) followed by cross-encoder re-ranking.
+
+    Pulls ``dense_k`` chunks via pgvector ANN and ``fts_k`` via PostgreSQL FTS,
+    merges them with RRF, then scores the fused candidate pool with the cross-encoder
+    and returns the ``top_k`` highest-scoring results.
+    """
+    if top_k < 1:
+        raise ValueError("top_k must be greater than zero")
+
+    candidates = retrieve_hybrid(
+        query_embedding,
+        query,
+        store,
+        dense_k=dense_k,
+        fts_k=fts_k,
+        top_k=max(dense_k, fts_k),
+        rrf_k=rrf_k,
+        metadata_filter=metadata_filter,
+        ef_search=ef_search,
+    )
+    return reranker.rerank(query, candidates, top_k=top_k)  # type: ignore[arg-type]

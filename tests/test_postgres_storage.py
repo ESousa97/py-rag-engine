@@ -37,12 +37,16 @@ def test_embeddings_table_uses_pgvector_jsonb_and_hnsw_cosine_index() -> None:
     assert "content_hash VARCHAR(64) NOT NULL" in table_sql
     assert "metadata JSONB DEFAULT '{}'::jsonb NOT NULL" in table_sql
     assert "CONSTRAINT uq_embeddings_model_hash UNIQUE" in table_sql
+    assert "text_search_tsv" in table_sql
+    assert "to_tsvector('english', text)" in table_sql
     assert (
         "CREATE INDEX ix_embeddings_embedding_hnsw_cosine "
         "ON embeddings USING hnsw (embedding vector_cosine_ops)"
     ) in index_sql[0]
     assert "WITH (m = 16, ef_construction = 64)" in index_sql[0]
     assert index_sql[1] == "CREATE INDEX ix_embeddings_metadata_gin ON embeddings USING gin (metadata)"
+    assert "ix_embeddings_text_search_gin" in index_sql[2]
+    assert "USING gin" in index_sql[2]
 
 
 def test_store_validates_embedding_dimensions() -> None:
