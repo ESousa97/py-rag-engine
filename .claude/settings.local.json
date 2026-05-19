@@ -77,7 +77,10 @@
       "Bash(git fetch *)",
       "Bash(git rev-list *)",
       "Bash(xargs grep -l \"tsvector\\\\|tsquery\\\\|fts\\\\|full.text\\\\|search\")",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(gh run *)",
+      "Bash(Select-String -Pattern \"FAIL|Error|error\" -Context 0,3)",
+      "Bash(Select-Object -First 80)"
     ]
   }
 }
