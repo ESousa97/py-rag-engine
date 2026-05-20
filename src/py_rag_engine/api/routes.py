@@ -12,6 +12,7 @@ from py_rag_engine.generation.lm_studio_chat import generate_answer
 from py_rag_engine.ingestion.pipeline import ingest_file
 from py_rag_engine.retrieval import (
     CrossEncoderReranker,
+    retrieve_hybrid,
     retrieve_hybrid_with_rerank,
     retrieve_with_rerank,
 )
@@ -162,7 +163,7 @@ def query_documents(request: Request, body: QueryRequest) -> QueryResponse:
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Embedding service unavailable.") from exc
 
-    if body.use_hybrid:
+    if body.use_hybrid and body.use_rerank:
         results = retrieve_hybrid_with_rerank(
             body.question,
             query_vec,
@@ -172,7 +173,18 @@ def query_documents(request: Request, body: QueryRequest) -> QueryResponse:
             metadata_filter=body.metadata_filter,
         )
         retrieval_mode = "hybrid_rerank"
-    else:
+        score_attr = "rerank_score"
+    elif body.use_hybrid:
+        results = retrieve_hybrid(
+            query_vec,
+            body.question,
+            store,
+            top_k=body.top_k,
+            metadata_filter=body.metadata_filter,
+        )
+        retrieval_mode = "hybrid"
+        score_attr = "rrf_score"
+    elif body.use_rerank:
         results = retrieve_with_rerank(
             body.question,
             query_vec,
@@ -182,6 +194,15 @@ def query_documents(request: Request, body: QueryRequest) -> QueryResponse:
             metadata_filter=body.metadata_filter,
         )
         retrieval_mode = "dense_rerank"
+        score_attr = "rerank_score"
+    else:
+        results = store.similarity_search(
+            query_vec,
+            top_k=body.top_k,
+            metadata_filter=body.metadata_filter,
+        )
+        retrieval_mode = "dense"
+        score_attr = "cosine_similarity"
 
     sources = [
         SourceResult(
@@ -189,7 +210,7 @@ def query_documents(request: Request, body: QueryRequest) -> QueryResponse:
             source=Path(r.metadata.get("source", "")).name or r.metadata.get("source", ""),
             page=r.metadata.get("page"),
             chunk_index=r.metadata.get("chunk_index"),
-            score=round(r.rerank_score, 6),
+            score=round(float(getattr(r, score_attr)), 6),
         )
         for r in results
     ]

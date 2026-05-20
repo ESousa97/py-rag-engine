@@ -3,8 +3,10 @@
 A Python RAG (Retrieval-Augmented Generation) engine that covers the full
 pipeline from document ingestion to re-ranked retrieval. It ingests PDF and
 Markdown files, chunks text recursively (with optional semantic splitting),
-stores embeddings in PostgreSQL with pgvector, performs dense ANN search, and
-re-ranks the candidates with a Cross-Encoder for higher precision.
+stores embeddings in PostgreSQL with pgvector, performs **hybrid search**
+(dense ANN + full-text BM25-style) fused with Reciprocal Rank Fusion, and
+re-ranks the candidates with a Cross-Encoder for higher precision. A
+FastAPI REST API exposes the whole pipeline behind a few HTTP endpoints.
 
 ## Pipeline Overview
 
@@ -19,14 +21,19 @@ PDF / Markdown
       │
       ▼
   PostgreSQL + pgvector  ◄──  HNSW cosine index (bge-m3 · 1024 dims)
+                         ◄──  GIN index on tsvector (Postgres FTS)
       │
-      ▼
-  Dense recall  (top-20 candidates via pgvector ANN)
+      ├──► Dense recall  (top-20 via pgvector cosine ANN)
       │
-      ▼
+      └──► FTS recall    (top-20 via ts_rank_cd, websearch_to_tsquery)
+                │
+                ▼
+       Reciprocal Rank Fusion (RRF, k=60)
+                │
+                ▼
   Cross-Encoder re-rank  (ms-marco-MiniLM-L-6-v2, top-5 final)
-      │
-      ▼
+                │
+                ▼
   RerankedResult list ordered by relevance score
 ```
 
@@ -36,12 +43,18 @@ PDF / Markdown
 - Recursive chunking via `RecursiveCharacterTextSplitter` with dynamic overlap.
 - Optional semantic paragraph chunking using cosine similarity between embeddings.
 - SHA-256 content hashes for duplicate detection.
-- PostgreSQL + pgvector persistence with HNSW cosine index and JSONB metadata.
+- PostgreSQL + pgvector persistence with HNSW cosine index, FTS `tsvector`
+  GIN index, and JSONB metadata.
 - Dense ANN search returning `cosine_similarity = 1 − cosine_distance`.
-- **Two-stage retrieval**: dense recall (top-20) + Cross-Encoder re-rank (top-5).
+- **Hybrid search**: dense (pgvector) + full-text (Postgres `ts_rank_cd` +
+  `websearch_to_tsquery`) fused with Reciprocal Rank Fusion (RRF). Catches
+  technical terms and error codes that pure embeddings sometimes miss.
+- **Three-stage retrieval**: dense + FTS → RRF fusion → Cross-Encoder re-rank.
 - `CrossEncoderReranker` with lazy model loading and injectable `predict` for tests.
-- `retrieve_with_rerank` orchestrator that wires the two stages together.
-- 27 unit/integration tests — CI runs on Python 3.11 and 3.12.
+- `retrieve_hybrid_with_rerank` orchestrator wiring all three stages together.
+- **FastAPI REST API** (`/health`, `/documents`, `/query`) with switchable
+  retrieval modes (`use_hybrid`, `use_rerank`) and optional grounded answer.
+- 84 unit/integration tests — CI runs on Python 3.11 and 3.12.
 
 ## Project Layout
 
@@ -63,6 +76,7 @@ py-rag-engine/
 ├── reports/                             # eval_report_<UTC>.json (gitignored)
 ├── scripts/
 │   ├── demo_rerank.py                   # E2E demo (ingest→embed→store→rerank)
+│   ├── demo_hybrid.py                   # Hybrid Search demo (dense vs FTS vs RRF)
 │   ├── eval_ragas.py                    # offline RAGAS CLI (thin wrapper)
 │   └── process_document.py              # CLI for PDF/Markdown chunk processing
 ├── src/
@@ -71,6 +85,10 @@ py-rag-engine/
 │       ├── config.py                    # LMStudioConfig / PostgresConfig / EvalConfig
 │       ├── domain.py                    # DocumentChunk + ChunkMetadata
 │       ├── vector_math.py               # numpy cosine similarity
+│       ├── api/
+│       │   ├── app.py                   # FastAPI factory + lifespan
+│       │   ├── routes.py                # /health, /documents, /query
+│       │   └── schemas.py               # Pydantic request/response models
 │       ├── chunking/
 │       │   ├── recursive.py             # recursive splitter and dynamic overlap
 │       │   └── semantic.py              # embedding-based semantic splitting
@@ -91,10 +109,11 @@ py-rag-engine/
 │       │   ├── loaders.py               # PDF and Markdown loaders
 │       │   └── pipeline.py              # ingest_file / ingest_path
 │       ├── retrieval/
+│       │   ├── hybrid.py                # retrieve_hybrid + reciprocal_rank_fusion
 │       │   ├── rerank.py                # CrossEncoderReranker + rerank_candidates
-│       │   └── service.py               # rank_chunks_by_similarity + retrieve_with_rerank
+│       │   └── service.py               # retrieve_with_rerank, retrieve_hybrid_with_rerank
 │       └── storage/
-│           └── postgres.py              # PostgresEmbeddingStore (pgvector)
+│           └── postgres.py              # PostgresEmbeddingStore (pgvector + FTS)
 ├── tests/
 │   ├── test_chunking.py
 │   ├── test_config.py                   # env loading + dataclass defaults
@@ -364,6 +383,151 @@ different signals (semantic proximity vs. precise relevance).
 | `--reset-table` | off | Drop and recreate `embeddings` before inserting |
 | `--reranker-model` | `cross-encoder/ms-marco-MiniLM-L-6-v2` | HuggingFace model name or local path |
 | `--storage-model` | `bge-m3` | Embedding model discriminator stored in the DB |
+
+---
+
+## REST API — Try the Full Pipeline with curl
+
+The `py_rag_engine.api` package ships a FastAPI app that exposes the whole
+pipeline (ingest → embed → store → hybrid search → rerank → generate) over
+HTTP. Run uvicorn once and drive the engine from any terminal with `curl`.
+
+### 1) Start the server
+
+In one terminal (keep it open — uvicorn runs in the foreground):
+
+```powershell
+cd C:\path\to\py-rag-engine
+$env:EVAL_POSTGRES_URL    = "postgresql+psycopg://postgres:$env:POSTGRES_PASSWORD@localhost:5434/rag"
+$env:LM_STUDIO_BASE_URL   = "http://localhost:1234"
+$env:LM_STUDIO_EMBED_MODEL= "text-embedding-bge-m3"
+$env:LM_STUDIO_CHAT_MODEL = "qwen2.5-7b-instruct"
+$env:LM_STUDIO_EMBED_BATCH= "4"   # small batches avoid WinError 10054 mid-run
+.venv\Scripts\python.exe -m uvicorn "py_rag_engine.api:create_app" --factory --host 127.0.0.1 --port 8001
+```
+
+Look for `Application startup complete` and `Uvicorn running on http://127.0.0.1:8001`.
+
+### 2) Health check
+
+```bash
+curl -s http://127.0.0.1:8001/health
+# {"status":"ok","postgres":"ok","lm_studio":"ok"}
+```
+
+### 3) Ingest a PDF and a Markdown file
+
+```bash
+curl -X POST "http://127.0.0.1:8001/documents?chunk_size=1024" \
+     -F "file=@data/gdp_document_0.pdf"
+# {"source":"gdp_document_0.pdf","chunks_ingested":58,"chunk_ids":[...]}
+
+curl -X POST "http://127.0.0.1:8001/documents?chunk_size=1024" \
+     -F "file=@data/eval_document.md"
+# {"source":"eval_document.md","chunks_ingested":15,"chunk_ids":[...]}
+```
+
+Re-uploading the same file is idempotent thanks to the SHA-256 dedup —
+rows are upserted on `(embedding_model, content_hash)`.
+
+### 4) List ingested sources
+
+```bash
+curl -s http://127.0.0.1:8001/documents
+# [{"source":"eval_document.md","chunks":15},
+#  {"source":"gdp_document_0.pdf","chunks":58}]
+```
+
+### 5) Query — 4 retrieval modes, same endpoint
+
+`POST /query` takes two boolean toggles and serves all the modes the
+pipeline supports.
+
+| `use_hybrid` | `use_rerank` | Mode | Score returned |
+|---|---|---|---|
+| `false` | `false` | `dense` (pgvector ANN only) | cosine similarity |
+| `true`  | `false` | `hybrid` (dense + FTS via RRF) | RRF score |
+| `false` | `true`  | `dense_rerank` (cosine + Cross-Encoder) | rerank score |
+| `true`  | `true`  | `hybrid_rerank` (RRF + Cross-Encoder) | rerank score |
+
+```bash
+# Dense only
+curl -X POST http://127.0.0.1:8001/query -H "Content-Type: application/json" \
+  -d '{"question":"How does HNSW work in pgvector?","top_k":3,
+       "use_hybrid":false,"use_rerank":false,"generate_answer":false}'
+
+# Hybrid (no rerank) — main mode to verify FTS is working
+curl -X POST http://127.0.0.1:8001/query -H "Content-Type: application/json" \
+  -d '{"question":"How does HNSW work in pgvector?","top_k":3,
+       "use_hybrid":true,"use_rerank":false,"generate_answer":false}'
+
+# Hybrid + Cross-Encoder rerank + grounded answer via Qwen2.5-7B
+curl -X POST http://127.0.0.1:8001/query -H "Content-Type: application/json" \
+  -d '{"question":"How does HNSW work in pgvector?","top_k":3,
+       "use_hybrid":true,"use_rerank":true,"generate_answer":true}'
+```
+
+`/query` response shape:
+
+```json
+{
+  "answer": null,                   // null when generate_answer=false
+  "retrieval_mode": "hybrid",       // dense | hybrid | dense_rerank | hybrid_rerank
+  "sources": [
+    {
+      "text": "## HNSW Indexing ...",
+      "source": "eval_document.md",
+      "page": null,                 // PDFs include page number
+      "chunk_index": 7,
+      "score": 0.0328               // RRF / cosine / rerank depending on mode
+    }
+  ]
+}
+```
+
+### Reading the RRF score
+
+In **hybrid** mode the top-1 score doubles (≈ `1/(60+1) × 2`) when the same
+chunk is the top hit in both dense **and** FTS lists — the double signal is
+exactly the boost technical terms and error codes need. A score that stays
+at `1/(60+1) ≈ 0.0164` means the chunk only came from the dense side
+(typical when the query is a long natural-language sentence with stopwords
+that defeat `websearch_to_tsquery`).
+
+### 6) Stop the server
+
+`Ctrl-C` in the uvicorn terminal. To stop Postgres too: `docker stop rag-pgvector`.
+
+### Notes for Windows + Python 3.14 users
+
+This environment ships an `OPENSSL_Uplink` incompatibility between Python's
+bundled OpenSSL (used by `urllib.request`) and `psycopg[binary]`'s embedded
+libpq. The project handles it in two places:
+
+1. `LMStudioClient._default_http_json` uses `http.client` for plain HTTP
+   URLs and only falls back to `urllib.request` for `https://`. This is
+   transparent for callers.
+2. `sentence_transformers.CrossEncoder(...)` triggers the same abort when
+   loaded after libpq in this build. If you hit it, run the API with
+   `use_rerank=false` per request (which skips the cross-encoder entirely).
+   The fix is environmental: use Python 3.12, `psycopg[c]` from source, or
+   isolate the reranker in a subprocess.
+
+### Hybrid-only demo without the API
+
+For a self-contained reproduction of the hybrid search behaviour against a
+synthetic corpus (compares dense vs FTS vs RRF per query):
+
+```powershell
+$env:LM_STUDIO_BASE_URL    = "http://localhost:1234"
+$env:LM_STUDIO_EMBED_MODEL = "text-embedding-bge-m3"
+$env:DEMO_POSTGRES_URL     = "postgresql+psycopg://postgres:$env:POSTGRES_PASSWORD@localhost:5434/rag"
+.venv\Scripts\python.exe scripts\demo_hybrid.py
+```
+
+The script ingests 10 short documents containing technical codes
+(`TS2304`, `ECONNREFUSED`, `HTTP 429`, ...) into `embeddings_hybrid_demo`,
+runs six queries, and prints the dense / FTS / hybrid rankings side by side.
 
 ---
 
@@ -681,11 +845,13 @@ python -m pytest -q
 ```
 
 ```text
-49 passed, 1 skipped
+83 passed, 1 skipped
 ```
 
 The skipped test is `tests/test_postgres_integration.py`, which requires a
-real Postgres instance and LM Studio.
+real Postgres instance and LM Studio. The suite covers chunking, ingestion,
+storage (pgvector + FTS), retrieval (dense, hybrid, RRF, rerank), the
+LM Studio client, generation, evaluation, and all REST endpoints.
 
 ### Integration test (full round-trip)
 
@@ -728,15 +894,20 @@ Library modules grouped by responsibility:
 | `embeddings/hashing.py` | SHA-256 content hashing |
 | `embeddings/lm_studio_embedder.py` | `make_lm_studio_embed(client)` |
 | `embeddings/sentence_transformer.py` | `make_sentence_transformer_embed(model)` |
-| `storage/postgres.py` | `PostgresEmbeddingStore`, pgvector HNSW |
+| `storage/postgres.py` | `PostgresEmbeddingStore`, pgvector HNSW + Postgres FTS |
+| `retrieval/hybrid.py` | `retrieve_hybrid`, `reciprocal_rank_fusion` |
 | `retrieval/rerank.py` | `CrossEncoderReranker`, `rerank_candidates` |
-| `retrieval/service.py` | `retrieve_with_rerank` pipeline |
+| `retrieval/service.py` | `retrieve_with_rerank`, `retrieve_hybrid_with_rerank` |
+| `api/app.py` | FastAPI factory + lifespan |
+| `api/routes.py` | REST endpoints: `/health`, `/documents`, `/query` |
+| `api/schemas.py` | Pydantic request/response models |
 | `generation/lm_studio_chat.py` | `generate_answer` grounded in context |
 | `evaluation/dataset.py` | `load_gold_standard(JSON)` |
 | `evaluation/metrics.py` | Faithfulness / answer_relevancy / context_precision |
 | `evaluation/ragas_official.py` | Optional official-library adapter |
 | `evaluation/runner.py` | `EvalRunner`, `build_summary`, `safe_table_name` |
-| `scripts/demo_rerank.py` | E2E demo CLI |
+| `scripts/demo_rerank.py` | E2E demo CLI (dense + Cross-Encoder rerank) |
+| `scripts/demo_hybrid.py` | Hybrid Search demo CLI (dense vs FTS vs RRF) |
 | `scripts/eval_ragas.py` | Offline RAGAS CLI |
 | `scripts/process_document.py` | Standalone chunking CLI |
 

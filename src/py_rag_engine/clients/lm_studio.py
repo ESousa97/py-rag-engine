@@ -11,10 +11,12 @@ the underlying request function via the `_http_json` constructor argument.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import time
 from collections.abc import Callable, Iterable
 from typing import Any
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from py_rag_engine.config import LMStudioConfig
@@ -117,8 +119,32 @@ class LMStudioClient:
         retries = self.config.retries
         backoff = self.config.backoff
         last_exc: Exception | None = None
+        parsed = urlparse(url)
+        use_httpclient = parsed.scheme == "http"  # http.client avoids the
+        # `urllib.request` + OpenSSL Applink conflict that aborts the process
+        # on Windows + Python 3.14 when psycopg's libpq is also loaded.
         for attempt in range(1, retries + 1):
             try:
+                if use_httpclient:
+                    conn = http.client.HTTPConnection(
+                        parsed.hostname, parsed.port or 80, timeout=timeout,
+                    )
+                    try:
+                        if payload is None:
+                            conn.request("GET", parsed.path or "/")
+                        else:
+                            data = json.dumps(payload).encode("utf-8")
+                            conn.request(
+                                "POST", parsed.path or "/", body=data,
+                                headers={
+                                    "Content-Type": "application/json",
+                                    "Connection": "close",
+                                },
+                            )
+                        resp = conn.getresponse()
+                        return json.loads(resp.read().decode("utf-8"))
+                    finally:
+                        conn.close()
                 if payload is None:
                     req = Request(url, method="GET")
                 else:
