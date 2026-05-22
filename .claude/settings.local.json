@@ -117,7 +117,10 @@
       "Bash(curl -s -X POST http://127.0.0.1:8001/query -H \"Content-Type: application/json\" -d '{\"question\":\"BGE-M3 embedding\",\"top_k\":3,\"use_hybrid\":false,\"use_rerank\":false,\"generate_answer\":false}' --max-time 60)",
       "Bash(curl -s -X POST http://127.0.0.1:8001/query -H \"Content-Type: application/json\" -d '{\"question\":\"BGE-M3 embedding\",\"top_k\":3,\"use_hybrid\":true,\"use_rerank\":false,\"generate_answer\":false}' --max-time 60)",
       "Bash(./.venv/Scripts/python.exe -m pytest --co -q)",
-      "Bash(./.venv/Scripts/python.exe -m pytest -q)"
+      "Bash(./.venv/Scripts/python.exe -m pytest -q)",
+      "Bash(curl -s http://127.0.0.1:1234/v1/models)",
+      "Bash(curl -s -X POST http://127.0.0.1:1234/v1/embeddings -H \"Content-Type: application/json\" -d \"{\\\\\"model\\\\\":\\\\\"text-embedding-bge-m3\\\\\",\\\\\"input\\\\\":[\\\\\"sanity check\\\\\"]}\")",
+      "PowerShell($env:PYTHONPATH = \"src\"; python scripts/practical_test_chunker_embedder.py)"
     ]
   }
 }

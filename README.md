@@ -87,7 +87,7 @@ To exercise the **full pipeline** end-to-end (ingest → embed → store → hyb
 | Area | What you get |
 | ---- | -------------- |
 | Ingestion | **PDF** page extraction via `pypdf` and **Markdown** (`.md` / `.markdown`) loaders with source-aware metadata. |
-| Chunking | **Recursive** splitter with dynamic overlap, plus optional **semantic chunking** using cosine similarity between paragraph embeddings. |
+| Chunking | **Recursive** splitter with dynamic overlap, plus optional **semantic chunking** using cosine similarity between paragraph embeddings. A standalone async `SemanticChunker` exposes `from_sample(...)` to **auto-calibrate** the cosine-distance threshold from a representative sample (`calibrate_distance_threshold`). |
 | Dedup | **SHA-256** content hash per chunk; upserts on `(embedding_model, content_hash)` keep the table idempotent across re-runs. |
 | Storage | **PostgreSQL + pgvector** with HNSW cosine index, JSONB metadata GIN index, and a `tsvector` GIN index for full-text search. |
 | Retrieval | **Three-stage**: dense pgvector ANN + Postgres FTS (`ts_rank_cd`, `websearch_to_tsquery`) fused via **Reciprocal Rank Fusion (RRF, k=60)**, then re-ranked by a **Cross-Encoder**. |
@@ -95,7 +95,7 @@ To exercise the **full pipeline** end-to-end (ingest → embed → store → hyb
 | Generation | Optional **grounded answer** via an LM Studio chat model (`generate_answer` assembles the prompt + citation contexts). |
 | API | **FastAPI** with `/health`, `/documents` (upload + list), and `/query` exposing four retrieval modes via `use_hybrid` / `use_rerank` toggles. |
 | Evaluation | Offline **RAGAS** runner with faithfulness / answer relevancy / context precision; outputs a timestamped JSON report and a config ranking. |
-| Tests | **84** unit / integration tests on Python 3.11 and 3.12 in CI; integration suite gated on `TEST_POSTGRES_URL` + `LM_STUDIO_BASE_URL`. |
+| Tests | **132** unit / integration tests on Python 3.11 and 3.12 in CI; integration suite gated on `TEST_POSTGRES_URL` + `LM_STUDIO_BASE_URL`. |
 
 ## Tech stack
 
@@ -221,6 +221,58 @@ python scripts\demo_rerank.py data\gdp_document_0.pdf `
   --reranker-model "$PWD\.cache\ms-marco-MiniLM-L-6-v2"
 ```
 
+### Programmatic chunker + embedder API
+
+For ad-hoc scripts that just need to embed text or split it into semantic chunks (without the full ingestion → Postgres pipeline), the top-level `SemanticChunker` and `VectorClient` cover the entire flow with async + type-checked APIs:
+
+```python
+import asyncio
+from openai import AsyncOpenAI
+from py_rag_engine import SemanticChunker, VectorClient, calibrate_distance_threshold
+
+async def main() -> None:
+    # Any OpenAI-compatible endpoint. LM Studio uses a dummy api_key.
+    openai_client = AsyncOpenAI(base_url="http://127.0.0.1:1234/v1", api_key="lm-studio")
+    embedder = VectorClient(
+        provider="openai",                # or "sentence-transformers" for local
+        model="text-embedding-bge-m3",
+        client=openai_client,
+        batch_size=32,
+        max_retries=5,                    # exponential backoff on HTTP 429
+        initial_backoff=1.0,
+    )
+
+    # Calibrate the cosine-distance threshold from a representative sample.
+    # For tiny / non-representative samples, prefer a fixed threshold.
+    threshold = await calibrate_distance_threshold(
+        sample_texts=open("data/eval_document.md", encoding="utf-8").read(),
+        embedder=embedder,
+        percentile=0.85,
+        margin=0.05,
+    )
+    chunker = SemanticChunker(embedder=embedder, distance_threshold=threshold)
+
+    # Equivalent one-liner:
+    # chunker = await SemanticChunker.from_sample(sample_text, embedder=embedder)
+
+    text = open("examples/article.md", encoding="utf-8").read()
+    chunks = await chunker.chunk(text, page=1, source="article.md")
+
+    for c in chunks:
+        # idempotency: c.content_hash is sha256(c.text); safe to upsert
+        print(c.metadata.chunk_index, c.content_hash[:10], c.text[:80])
+
+asyncio.run(main())
+```
+
+**Key points**
+
+- `SemanticChunker` groups adjacent paragraphs whose cosine distance is below `distance_threshold` and emits `DocumentChunk(text, metadata, content_hash)` — the SHA-256 `content_hash` is what `PostgresEmbeddingStore` uses for idempotent upserts.
+- `VectorClient.get_embeddings(texts)` batches the input and retries `RateLimitError` / HTTP 429 with exponential backoff (`initial_backoff * 2**attempt`, capped at `max_backoff`, plus optional `jitter`). Non-rate-limit errors propagate immediately.
+- For `bge-m3` empirically same-topic paragraph distances cluster around `~0.45` and topic shifts around `~0.65`; `DEFAULT_DISTANCE_THRESHOLD = 0.55` is tuned for that gap. Run `scripts/probe_semantic_distances.py` to inspect distances for your own corpus.
+
+See [docs/architecture.md](docs/architecture.md#public-chunker--embedder-api) for the full API contract and calibration guidance.
+
 ## Resilience (LM Studio retries)
 
 The `LMStudioClient` wraps every embedding / chat call with retries on `OSError`, `WinError 10054` (Windows socket reset under load), and malformed JSON, using exponential backoff tuned via `LMStudioConfig.retries` and `LMStudioConfig.backoff`. Failed calls are logged and surface to the API as `502` / `503` responses. Tune behaviour via env vars and the wiring in [`src/py_rag_engine/clients/lm_studio.py`](src/py_rag_engine/clients/lm_studio.py) and [`src/py_rag_engine/api/routes.py`](src/py_rag_engine/api/routes.py).
@@ -244,7 +296,9 @@ The `LMStudioClient` wraps every embedding / chat call with retries on `OSError`
 | `src/py_rag_engine/vector_math.py` | `cosine_similarity` (numpy) |
 | `src/py_rag_engine/ingestion/` | PDF + Markdown loaders, `ingest_file` / `ingest_path` orchestration |
 | `src/py_rag_engine/chunking/` | Recursive splitter with dynamic overlap; embedding-based semantic splitting |
+| `src/py_rag_engine/chunker.py` | Public `SemanticChunker` + `calibrate_distance_threshold` (async; threshold auto-tuning) |
 | `src/py_rag_engine/embeddings/` | SHA-256 hashing, `make_lm_studio_embed`, `make_sentence_transformer_embed` |
+| `src/py_rag_engine/embedder.py` | Public `VectorClient` (OpenAI-compatible or SentenceTransformer, async batching + rate-limit backoff) |
 | `src/py_rag_engine/storage/postgres.py` | `PostgresEmbeddingStore` (pgvector HNSW + Postgres FTS) |
 | `src/py_rag_engine/retrieval/hybrid.py` | `retrieve_hybrid`, `reciprocal_rank_fusion` |
 | `src/py_rag_engine/retrieval/rerank.py` | `CrossEncoderReranker`, `rerank_candidates` |
@@ -269,7 +323,7 @@ pytest -q
 ```
 
 ```text
-83 passed, 1 skipped
+132 passed, 1 skipped
 ```
 
 The single skipped test is `tests/test_postgres_integration.py`, which is gated on `TEST_POSTGRES_URL` + `LM_STUDIO_BASE_URL` and embeds three sentences round-trip through pgvector.

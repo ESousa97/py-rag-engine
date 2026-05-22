@@ -15,7 +15,9 @@ Library code lives under `src/py_rag_engine/`, CLI entry points under
 | `py_rag_engine.clients` | HTTP adapters (today: `LMStudioClient`, `detect_chat_model`) |
 | `py_rag_engine.ingestion` | File loaders (`load_pdf`, `load_markdown`) + ingestion pipeline |
 | `py_rag_engine.chunking` | Recursive and semantic chunking strategies |
+| `py_rag_engine.chunker` | Public `SemanticChunker` + `calibrate_distance_threshold` helper |
 | `py_rag_engine.embeddings` | Hashing + embedder factories (LM Studio, SentenceTransformer) |
+| `py_rag_engine.embedder` | Public `VectorClient` (OpenAI-compatible / SentenceTransformer) with async batching and rate-limit backoff |
 | `py_rag_engine.storage` | PostgreSQL + pgvector persistence and ANN search |
 | `py_rag_engine.retrieval` | Dense ranking + cross-encoder re-ranking |
 | `py_rag_engine.generation` | LLM-grounded answer generation (LM Studio chat) |
@@ -114,6 +116,98 @@ a single timestamped JSON report aggregating all results.
 
 See [evaluation.md](evaluation.md) for the metric definitions and report
 schema.
+
+## Public Chunker / Embedder API
+
+`py_rag_engine.chunker` and `py_rag_engine.embedder` expose a small, async-first
+public surface that is independent of the ingestion pipeline. They are useful
+when you want to embed and chunk arbitrary text from your own application code
+(notebook experiments, batch scripts, alternative pipelines):
+
+```python
+import asyncio
+from openai import AsyncOpenAI
+from py_rag_engine import SemanticChunker, VectorClient, calibrate_distance_threshold
+
+async def main() -> None:
+    # OpenAI-compatible client pointing at LM Studio (or OpenAI itself).
+    openai_client = AsyncOpenAI(base_url="http://127.0.0.1:1234/v1", api_key="lm-studio")
+    embedder = VectorClient(
+        provider="openai",
+        model="text-embedding-bge-m3",
+        client=openai_client,
+        batch_size=32,
+        max_retries=5,        # exponential backoff on HTTP 429 / RateLimitError
+        initial_backoff=1.0,
+    )
+
+    # Auto-tune the cosine-distance threshold from a representative sample.
+    chunker = await SemanticChunker.from_sample(
+        sample_texts=open("data/eval_document.md", encoding="utf-8").read(),
+        embedder=embedder,
+        percentile=0.85,
+        margin=0.05,
+    )
+
+    chunks = await chunker.chunk(text, page=1, source="manual.md")
+    for c in chunks:
+        print(c.metadata.chunk_index, c.content_hash[:10], c.text[:80])
+
+asyncio.run(main())
+```
+
+### `SemanticChunker`
+
+- Async paragraph-based splitter. Splits the input into paragraphs, embeds them,
+  and groups adjacent paragraphs whose cosine distance stays below
+  `distance_threshold`. A new chunk also starts when `max_paragraphs_per_chunk`
+  is hit, providing a hard upper bound on chunk length.
+- Each emitted `DocumentChunk` carries `text`, `ChunkMetadata` (`source`, `page`,
+  `chunk_index`), and a SHA-256 `content_hash` of the chunk text — enabling
+  idempotent upserts in `PostgresEmbeddingStore`.
+- Single-paragraph input short-circuits the embedding call, so callers can pass
+  small fragments without paying a round-trip.
+- `chunk_index_start` allows chunks for a multi-page document to keep monotonic
+  indices across page boundaries.
+
+### `calibrate_distance_threshold` and `from_sample`
+
+`calibrate_distance_threshold(sample_texts, *, percentile=0.85, margin=0.05, ...)`
+estimates a good threshold from adjacent-paragraph distances in your sample
+corpus and returns `percentile(distances) + margin`, clamped to cosine bounds
+`[0.0, 2.0]`. `SemanticChunker.from_sample(...)` is a convenience constructor
+that runs the calibration and builds the chunker in one call.
+
+Tuning notes:
+
+- The sample must be **representative**: include many same-topic paragraphs so
+  the chosen percentile lands on intra-topic distances (i.e. *below* the typical
+  topic-shift jump). Tiny samples with only a couple of transitions tend to
+  produce thresholds above every distance and collapse the whole document into
+  a single chunk.
+- Empirical reference for `bge-m3` (LM Studio): intra-topic adjacent distances
+  cluster around `~0.45`, inter-topic shifts around `~0.65`. The package default
+  `DEFAULT_DISTANCE_THRESHOLD = 0.55` is tuned for that gap.
+- If the sample has fewer than two paragraphs (no adjacent pairs to measure),
+  the helper returns `fallback_threshold` without calling the embedder.
+
+### `VectorClient`
+
+- Async embedder with two providers: `provider="openai"` (works with any
+  OpenAI-compatible endpoint, including LM Studio) and
+  `provider="sentence-transformers"` for fully-local inference. The model
+  default is provider-aware: `text-embedding-3-small` and `all-MiniLM-L6-v2`
+  respectively.
+- `get_embeddings(texts)` batches the inputs (`batch_size`) and returns one
+  `list[float]` per input. Empty input short-circuits to `[]` without contacting
+  the provider.
+- Rate-limit handling for the OpenAI path: requests are retried with
+  exponential backoff plus optional jitter on `RateLimitError`, `status_code ==
+  429`, or any error whose `.response.status_code == 429`. After `max_retries`
+  the original exception is re-raised so callers can react. Non-rate-limit
+  errors propagate immediately.
+- Tests inject a fake OpenAI client and a fake `sleep` callable to assert the
+  backoff schedule without sleeping; see `tests/test_embedder_module.py`.
 
 ## Configuration
 
