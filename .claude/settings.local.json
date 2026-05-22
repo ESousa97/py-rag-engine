@@ -120,7 +120,12 @@
       "Bash(./.venv/Scripts/python.exe -m pytest -q)",
       "Bash(curl -s http://127.0.0.1:1234/v1/models)",
       "Bash(curl -s -X POST http://127.0.0.1:1234/v1/embeddings -H \"Content-Type: application/json\" -d \"{\\\\\"model\\\\\":\\\\\"text-embedding-bge-m3\\\\\",\\\\\"input\\\\\":[\\\\\"sanity check\\\\\"]}\")",
-      "PowerShell($env:PYTHONPATH = \"src\"; python scripts/practical_test_chunker_embedder.py)"
+      "PowerShell($env:PYTHONPATH = \"src\"; python scripts/practical_test_chunker_embedder.py)",
+      "PowerShell(python -m pytest tests/test_async_search_and_flashrank.py -v 2>&1)",
+      "PowerShell(try { Invoke-RestMethod -Uri \"http://localhost:1234/v1/models\" -Method Get -TimeoutSec 5 | ConvertTo-Json -Depth 4 } catch { Write-Output \"LM Studio not reachable: $_\" })",
+      "PowerShell(Write-Output \"POSTGRES_PASSWORD set: $\\([bool]$env:POSTGRES_PASSWORD\\)\"; Write-Output \"POSTGRES_HOST: $env:POSTGRES_HOST\"; Write-Output \"POSTGRES_PORT: $env:POSTGRES_PORT\"; Write-Output \"POSTGRES_DB: $env:POSTGRES_DB\"; Write-Output \"POSTGRES_USER: $env:POSTGRES_USER\"; Write-Output \"EVAL_POSTGRES_URL: $env:EVAL_POSTGRES_URL\")",
+      "PowerShell($env:PYTHONPATH = \"src\"; python scripts/demo_async_search_rerank.py 2>&1 | Select-Object -Last 80)",
+      "PowerShell($cache = Join-Path $PWD \".flashrank_cache\"; New-Item -ItemType Directory -Force -Path $cache | Out-Null; $zip = Join-Path $cache \"ms-marco-MiniLM-L-6-v2.zip\"; Write-Output \"downloading to $zip\"; Invoke-WebRequest -Uri \"https://huggingface.co/prithivida/flashrank/resolve/main/ms-marco-MiniLM-L-6-v2.zip\" -OutFile $zip; Write-Output \"size: $\\(\\(Get-Item $zip\\).Length\\) bytes\"; Expand-Archive -Path $zip -DestinationPath $cache -Force; Get-ChildItem $cache -Recurse | Select-Object -First 30 | ForEach-Object { Write-Output $_.FullName })"
     ]
   }
 }

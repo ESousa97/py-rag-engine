@@ -32,6 +32,9 @@ embeddings = [
     "openai>=1.0.0",
     "sentence-transformers>=2.2.0",
 ]
+rerank = [
+    "flashrank>=0.2.10",
+]
 eval = [
     "sentence-transformers>=2.2.0",
     # Optional: the script ships a manual RAGAS-equivalent implementation that
