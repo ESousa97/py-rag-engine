@@ -54,8 +54,8 @@ def _lm_studio_embeddings(texts: Sequence[str]) -> list[list[float]]:
     last_error: Exception | None = None
     for _ in range(3):
         try:
-            # Scheme restricted to http/https above.  # nosec B310
-            with urlopen(request, timeout=60) as response:
+            # Scheme restricted to http/https above.
+            with urlopen(request, timeout=60) as response:  # nosec B310
                 body: dict[str, Any] = json.loads(response.read().decode("utf-8"))
             return [list(map(float, item["embedding"])) for item in body["data"]]
         except OSError as exc:

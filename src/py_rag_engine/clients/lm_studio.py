@@ -167,8 +167,8 @@ class LMStudioClient:
                         method="POST",
                     )
                 try:
-                    # Scheme restricted to http/https above.  # nosec B310
-                    with urlopen(req, timeout=timeout) as resp:
+                    # Scheme restricted to http/https above.
+                    with urlopen(req, timeout=timeout) as resp:  # nosec B310
                         return json.loads(resp.read().decode("utf-8"))
                 except HTTPError as exc:
                     if exc.code < 500:  # client error — retrying will not help
