@@ -61,14 +61,14 @@ class ConfigResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "id":              self.id,
+            "id": self.id,
             "embedding_model": self.embedding_model,
             "embedding_label": self.embedding_label,
-            "chunk_size":      self.chunk_size,
-            "num_chunks":      self.num_chunks,
-            "embed_time_sec":  self.embed_time_sec,
-            "metrics":         self.metrics,
-            "per_question":    self.per_question,
+            "chunk_size": self.chunk_size,
+            "num_chunks": self.num_chunks,
+            "embed_time_sec": self.embed_time_sec,
+            "metrics": self.metrics,
+            "per_question": self.per_question,
         }
 
 
@@ -146,7 +146,7 @@ class EvalRunner:
 
     def _embed(self, chunks: list, embed_fn: EmbedFn) -> tuple[list[list[float]], float]:
         print("  [2/5] Embedding chunks…")
-        t0      = time.perf_counter()
+        t0 = time.perf_counter()
         vectors = embed_fn([c.text for c in chunks])
         t_embed = time.perf_counter() - t0
         print(f"        {len(vectors)} vectors  dim={len(vectors[0])}  {t_embed:.1f}s")
@@ -192,11 +192,11 @@ class EvalRunner:
         print("  [4/5] Retrieving contexts & generating answers…")
         samples: list[tuple[EvalSample, float]] = []
         for i, qa in enumerate(questions, 1):
-            q_vec   = embed_fn([qa.question])[0]
+            q_vec = embed_fn([qa.question])[0]
             results = store.similarity_search(q_vec, top_k=self.top_k, ef_search=self.ef_search)
             contexts = [r.text for r in results]
             mean_sim = (sum(r.cosine_similarity for r in results) / len(results)) if results else 0.0
-            answer   = generate_answer(self.client, qa.question, contexts, chat_model=self.chat_model)
+            answer = generate_answer(self.client, qa.question, contexts, chat_model=self.chat_model)
             print(f"        Q{i:02d}: {qa.question[:60]}…")
             sample = EvalSample(
                 question=qa.question,
@@ -234,14 +234,14 @@ class EvalRunner:
     ) -> ConfigResult:
         per_q = [
             {
-                "question":               sample.question,
-                "answer":                  sample.answer,
-                "mean_cosine_similarity":  mean_sim,
-                "faithfulness":            sc.faithfulness,
-                "answer_relevancy":        sc.answer_relevancy,
-                "context_precision":       sc.context_precision,
+                "question": sample.question,
+                "answer": sample.answer,
+                "mean_cosine_similarity": mean_sim,
+                "faithfulness": sc.faithfulness,
+                "answer_relevancy": sc.answer_relevancy,
+                "context_precision": sc.context_precision,
             }
-            for (sample, mean_sim), sc in zip(samples, scores)
+            for (sample, mean_sim), sc in zip(samples, scores, strict=True)
         ]
 
         def avg(key: str) -> float | None:
@@ -256,9 +256,9 @@ class EvalRunner:
             num_chunks=num_chunks,
             embed_time_sec=round(embed_time, 2),
             metrics={
-                "faithfulness":              avg("faithfulness"),
-                "answer_relevancy":          avg("answer_relevancy"),
-                "context_precision":         avg("context_precision"),
+                "faithfulness": avg("faithfulness"),
+                "answer_relevancy": avg("answer_relevancy"),
+                "context_precision": avg("context_precision"),
                 "mean_retrieval_similarity": avg("mean_cosine_similarity"),
             },
             per_question=per_q,
@@ -284,9 +284,9 @@ def build_summary(configs: list[ConfigResult]) -> dict[str, Any]:
 
     ranked = sorted(configs, key=avg_score, reverse=True)
     return {
-        "best_faithfulness":         best("faithfulness"),
-        "best_answer_relevancy":     best("answer_relevancy"),
-        "best_context_precision":    best("context_precision"),
+        "best_faithfulness": best("faithfulness"),
+        "best_answer_relevancy": best("answer_relevancy"),
+        "best_context_precision": best("context_precision"),
         "best_retrieval_similarity": best("mean_retrieval_similarity"),
         "overall_ranking": [
             {"rank": i + 1, "config": c.id, "avg_score": round(avg_score(c), 4)}

@@ -50,8 +50,8 @@ def load_gold_standard(path: str | Path) -> list[GoldQuestion]:
     for i, item in enumerate(raw, 1):
         try:
             qid = item["id"]
-            q   = item["question"]
-            gt  = item["ground_truth"]
+            q = item["question"]
+            gt = item["ground_truth"]
         except KeyError as exc:
             raise ValueError(f"Question #{i} missing required key {exc}") from exc
         if qid in seen_ids:

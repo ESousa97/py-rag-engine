@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError

@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 
 from py_rag_engine.api.routes import router
 from py_rag_engine.retrieval import CrossEncoderReranker
-from py_rag_engine.retrieval.rerank import RerankedResult
 from py_rag_engine.storage import EmbeddingInput, SimilaritySearchResult
 
 
@@ -57,7 +56,7 @@ class _StubStore:
             SimilaritySearchResult(
                 id=1,
                 text="stub result",
-                metadata={"source": "/tmp/stub.pdf", "page": 1, "chunk_index": 0},
+                metadata={"source": "data/stub.pdf", "page": 1, "chunk_index": 0},
                 content_hash="abc",
                 embedding_model="openai-3-small",
                 cosine_similarity=0.9,

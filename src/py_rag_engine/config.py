@@ -80,7 +80,7 @@ class PostgresConfig:
         user = os.environ.get("POSTGRES_USER", "postgres")
         host = os.environ.get("POSTGRES_HOST", "localhost")
         port = os.environ.get("POSTGRES_PORT", "5432")
-        db   = os.environ.get("POSTGRES_DB", "rag")
+        db = os.environ.get("POSTGRES_DB", "rag")
         return cls(url=f"postgresql+psycopg://{user}:{password}@{host}:{port}/{db}")
 
 

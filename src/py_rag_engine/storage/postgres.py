@@ -20,7 +20,6 @@ from sqlalchemy import (
     UniqueConstraint,
     bindparam,
     func,
-    literal,
     select,
     text as sql_text,
 )

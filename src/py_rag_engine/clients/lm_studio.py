@@ -16,6 +16,7 @@ import json
 import time
 from collections.abc import Callable, Iterable
 from typing import Any
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -55,7 +56,7 @@ class LMStudioClient:
         out: list[list[float]] = []
         for start in range(0, len(texts_list), self.config.embed_batch_size):
             batch = texts_list[start : start + self.config.embed_batch_size]
-            body  = self._http_json(
+            body = self._http_json(
                 f"{self.config.base_url}/v1/embeddings",
                 {"model": model_id, "input": batch},
             )
@@ -120,9 +121,14 @@ class LMStudioClient:
         backoff = self.config.backoff
         last_exc: Exception | None = None
         parsed = urlparse(url)
-        use_httpclient = parsed.scheme == "http"  # http.client avoids the
-        # `urllib.request` + OpenSSL Applink conflict that aborts the process
-        # on Windows + Python 3.14 when psycopg's libpq is also loaded.
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(
+                f"Unsupported URL scheme {parsed.scheme!r} in {url!r}; only http/https allowed"
+            )
+        # Plain http goes through http.client: it avoids the `urllib.request`
+        # + OpenSSL Applink conflict that aborts the process on Windows +
+        # Python 3.14 when psycopg's libpq is also loaded.
+        use_httpclient = parsed.scheme == "http"
         for attempt in range(1, retries + 1):
             try:
                 if use_httpclient:
@@ -142,7 +148,12 @@ class LMStudioClient:
                                 },
                             )
                         resp = conn.getresponse()
-                        return json.loads(resp.read().decode("utf-8"))
+                        raw = resp.read().decode("utf-8")
+                        if resp.status >= 500:
+                            raise OSError(f"HTTP {resp.status} from {url}: {raw[:200]}")
+                        if resp.status >= 400:
+                            raise ValueError(f"HTTP {resp.status} from {url}: {raw[:200]}")
+                        return json.loads(raw)
                     finally:
                         conn.close()
                 if payload is None:
@@ -155,8 +166,15 @@ class LMStudioClient:
                         headers={"Content-Type": "application/json", "Connection": "close"},
                         method="POST",
                     )
-                with urlopen(req, timeout=timeout) as resp:
-                    return json.loads(resp.read().decode("utf-8"))
+                try:
+                    # Scheme restricted to http/https above.  # nosec B310
+                    with urlopen(req, timeout=timeout) as resp:
+                        return json.loads(resp.read().decode("utf-8"))
+                except HTTPError as exc:
+                    if exc.code < 500:  # client error — retrying will not help
+                        detail = exc.read().decode("utf-8", "replace")[:200]
+                        raise ValueError(f"HTTP {exc.code} from {url}: {detail}") from exc
+                    raise
             except (OSError, json.JSONDecodeError) as exc:
                 last_exc = exc
                 if attempt < retries:

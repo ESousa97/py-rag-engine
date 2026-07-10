@@ -5,6 +5,7 @@ import os
 import time
 from collections.abc import Sequence
 from typing import Any
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import json
 
@@ -35,6 +36,9 @@ pytestmark = pytest.mark.skipif(
 
 
 def _lm_studio_embeddings(texts: Sequence[str]) -> list[list[float]]:
+    base_url = LM_STUDIO_BASE_URL.rstrip("/")
+    if urlparse(base_url).scheme not in ("http", "https"):
+        raise ValueError(f"LM_STUDIO_BASE_URL must use http/https, got {base_url!r}")
     payload = json.dumps(
         {
             "model": LM_STUDIO_EMBEDDING_MODEL,
@@ -42,7 +46,7 @@ def _lm_studio_embeddings(texts: Sequence[str]) -> list[list[float]]:
         }
     ).encode("utf-8")
     request = Request(
-        f"{LM_STUDIO_BASE_URL.rstrip('/')}/v1/embeddings",
+        f"{base_url}/v1/embeddings",
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -50,6 +54,7 @@ def _lm_studio_embeddings(texts: Sequence[str]) -> list[list[float]]:
     last_error: Exception | None = None
     for _ in range(3):
         try:
+            # Scheme restricted to http/https above.  # nosec B310
             with urlopen(request, timeout=60) as response:
                 body: dict[str, Any] = json.loads(response.read().decode("utf-8"))
             return [list(map(float, item["embedding"])) for item in body["data"]]

@@ -63,7 +63,8 @@ def _ensure_tiktoken_cache() -> None:
         "TIKTOKEN_CACHE_DIR", os.path.join(tempfile.gettempdir(), "data-gym-cache")
     ))
     cache_dir.mkdir(parents=True, exist_ok=True)
-    target = cache_dir / hashlib.sha1(url.encode()).hexdigest()
+    # SHA1 here only mirrors tiktoken's cache-file naming scheme — not security.
+    target = cache_dir / hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()
     if target.exists() and target.stat().st_size > 0:
         return
     try:
@@ -72,6 +73,7 @@ def _ensure_tiktoken_cache() -> None:
             check=True, capture_output=True,
         )
     except Exception as exc:                                                   # pragma: no cover
+        target.unlink(missing_ok=True)  # a partial file would poison the cache check above
         print(f"[WARN] Could not pre-cache tiktoken ({exc}); RAGAS may try the network.")
 
 
@@ -95,7 +97,7 @@ from py_rag_engine.evaluation import (                                         #
     load_gold_standard,
 )
 
-SCRIPT_DIR   = Path(__file__).parent
+SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
 
@@ -155,7 +157,7 @@ def _build_configs(
     for chunk in chunk_sizes:
         configs.append((
             {"model_name": "bge-m3",
-             "label":      "BGE-M3 via LM Studio (1024d, multilingual)",
+             "label": "BGE-M3 via LM Studio (1024d, multilingual)",
              "chunk_size": chunk},
             lm_studio_embed,
         ))
@@ -166,7 +168,7 @@ def _build_configs(
             for chunk in chunk_sizes:
                 configs.append((
                     {"model_name": "all-MiniLM-L6-v2",
-                     "label":      "all-MiniLM-L6-v2 via SentenceTransformer (384d, English)",
+                     "label": "all-MiniLM-L6-v2 via SentenceTransformer (384d, English)",
                      "chunk_size": chunk},
                     st_embed,
                 ))
@@ -180,13 +182,13 @@ def _build_configs(
 
 
 def main() -> None:
-    lm_cfg   = LMStudioConfig.from_env()
-    pg_cfg   = PostgresConfig.from_env()
+    lm_cfg = LMStudioConfig.from_env()
+    pg_cfg = PostgresConfig.from_env()
     eval_cfg = EvalConfig.from_env()
 
-    eval_doc   = PROJECT_ROOT / eval_cfg.eval_document
+    eval_doc = PROJECT_ROOT / eval_cfg.eval_document
     questions_path = PROJECT_ROOT / eval_cfg.questions_path
-    reports_dir    = PROJECT_ROOT / eval_cfg.reports_dir
+    reports_dir = PROJECT_ROOT / eval_cfg.reports_dir
 
     if not eval_doc.exists():
         sys.exit(f"[ERROR] Eval document not found: {eval_doc}")
@@ -196,7 +198,7 @@ def main() -> None:
     _print_header(lm_cfg, pg_cfg, eval_cfg, eval_doc)
 
     # ── Resolve chat model ──────────────────────────────────────────────────
-    client     = LMStudioClient(lm_cfg)
+    client = LMStudioClient(lm_cfg)
     chat_model = _resolve_chat_model(client, lm_cfg)
     print(f"Chat mdl  : {chat_model}")
 
@@ -235,7 +237,7 @@ def main() -> None:
         mode_label = ""
     print(f"\nQuestions : {len(questions)}{mode_label}")
 
-    lm_embed     = make_lm_studio_embed(client)
+    lm_embed = make_lm_studio_embed(client)
     configs, chunk_sizes = _build_configs(eval_cfg, lm_embed)
     total = len(configs)
     n_models = max(1, total // max(1, len(chunk_sizes)))
@@ -253,7 +255,7 @@ def main() -> None:
     )
 
     results: list[ConfigResult] = []
-    errors:  list[dict]         = []
+    errors: list[dict] = []
     for i, (cfg, embed_fn) in enumerate(configs, 1):
         config_id = f"{cfg['model_name']}_chunk{cfg['chunk_size']}"
         print(f"\n[{i}/{total}] {config_id}")
@@ -279,20 +281,20 @@ def main() -> None:
             errors.append({"config": config_id, "error": str(exc)})
 
     # ── Write report ───────────────────────────────────────────────────────
-    reports_dir.mkdir(exist_ok=True)
-    ts          = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     report_path = reports_dir / f"eval_report_{ts}.json"
     report = {
-        "evaluation_date":       datetime.now(timezone.utc).isoformat(),
-        "document":              str(eval_doc.relative_to(PROJECT_ROOT)),
-        "questions_path":        str(questions_path.relative_to(PROJECT_ROOT)),
-        "num_questions":         len(questions),
-        "lm_studio_base_url":    lm_cfg.base_url,
+        "evaluation_date": datetime.now(timezone.utc).isoformat(),
+        "document": str(eval_doc.relative_to(PROJECT_ROOT)),
+        "questions_path": str(questions_path.relative_to(PROJECT_ROOT)),
+        "num_questions": len(questions),
+        "lm_studio_base_url": lm_cfg.base_url,
         "lm_studio_embed_model": lm_cfg.embed_model,
-        "lm_studio_chat_model":  chat_model,
-        "configurations":        [r.to_dict() for r in results],
-        "summary":               build_summary(results),
-        "errors":                errors,
+        "lm_studio_chat_model": chat_model,
+        "configurations": [r.to_dict() for r in results],
+        "summary": build_summary(results),
+        "errors": errors,
     }
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 

@@ -28,13 +28,13 @@ def test_models_returns_list_of_dicts():
 
 
 def test_embed_batches_texts():
-    cfg  = LMStudioConfig(embed_batch_size=2)
+    cfg = LMStudioConfig(embed_batch_size=2)
     fake = _fake_http_factory([
         {"data": [{"embedding": [0.1, 0.2]}, {"embedding": [0.3, 0.4]}]},
         {"data": [{"embedding": [0.5, 0.6]}]},
     ])
     client = LMStudioClient(cfg, http_json=fake)
-    out    = client.embed(["a", "b", "c"], model="bge-m3")
+    out = client.embed(["a", "b", "c"], model="bge-m3")
     assert out == [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]
     # First batch had 2 texts, second batch had 1
     assert fake.calls[0][1]["input"] == ["a", "b"]

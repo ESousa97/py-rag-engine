@@ -90,9 +90,9 @@ def _llm_json_score(
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
-    na  = math.sqrt(sum(x * x for x in a))
-    nb  = math.sqrt(sum(y * y for y in b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
     return dot / (na * nb) if na > 0 and nb > 0 else 0.0
 
 
@@ -143,7 +143,10 @@ def answer_relevancy(
             model=chat_model,
             temperature=0.0,
             max_tokens=80,
-        ).lstrip("Q:").strip()
+        )
+        # Strip only a literal "Q:" prefix — str.lstrip("Q:") would also eat
+        # the first letter of questions starting with "Q" (e.g. "Qual…").
+        reverse_q = re.sub(r"^\s*Q\s*:\s*", "", reverse_q).strip()
         embeds = embed([sample.question, reverse_q])
         return round(max(0.0, min(1.0, _cosine(embeds[0], embeds[1]))), 4)
     except Exception as exc:
@@ -180,10 +183,10 @@ def evaluate_samples(
     """Compute all three metrics for every sample."""
     out: list[MetricScores] = []
     for i, s in enumerate(samples, 1):
-        faith   = faithfulness(client, s,   chat_model=chat_model, label=f"Q{i:02d} faith")
+        faith = faithfulness(client, s, chat_model=chat_model, label=f"Q{i:02d} faith")
         ans_rel = answer_relevancy(client, embed, s, chat_model=chat_model, label=f"Q{i:02d} ans_rel")
-        ctx_p   = context_precision(client, s, chat_model=chat_model, label=f"Q{i:02d} ctx_prec")
-        scores  = MetricScores(faithfulness=faith, answer_relevancy=ans_rel, context_precision=ctx_p)
+        ctx_p = context_precision(client, s, chat_model=chat_model, label=f"Q{i:02d} ctx_prec")
+        scores = MetricScores(faithfulness=faith, answer_relevancy=ans_rel, context_precision=ctx_p)
         out.append(scores)
         print(
             f"        scored Q{i:02d}:  faith={faith}  ans_rel={ans_rel}  ctx_prec={ctx_p}"

@@ -51,11 +51,11 @@ def _conn_url() -> str:
     full = os.environ.get("EVAL_POSTGRES_URL")
     if full:
         return full
-    pw   = os.environ.get("POSTGRES_PASSWORD", "admin")
+    pw = os.environ.get("POSTGRES_PASSWORD", "admin")
     user = os.environ.get("POSTGRES_USER", "postgres")
     host = os.environ.get("POSTGRES_HOST", "localhost")
     port = os.environ.get("POSTGRES_PORT", "5434")
-    db   = os.environ.get("POSTGRES_DB", "rag")
+    db = os.environ.get("POSTGRES_DB", "rag")
     return f"postgresql+psycopg://{user}:{pw}@{host}:{port}/{db}"
 
 
@@ -75,7 +75,7 @@ def ingest(sync_url: str, embedder: LMStudioClient, *, model: str, table: str) -
         print(f"[ingest] schema created for table '{table}' (model={model})")
 
         vectors = embedder.embed(CORPUS, model=model)
-        items   = [
+        items = [
             EmbeddingInput(
                 text=text,
                 embedding=vec,
@@ -122,7 +122,7 @@ def banner(title: str) -> None:
 
 
 def main() -> int:
-    sync_url  = _conn_url()
+    sync_url = _conn_url()
     async_url = sync_url  # psycopg3 driver works in both sync and async modes
     embed_model = os.environ.get("LM_STUDIO_EMBED_MODEL", "text-embedding-bge-m3")
     table = "demo_async_hybrid"

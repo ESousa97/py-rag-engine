@@ -225,12 +225,12 @@ def main() -> None:
     #     demais o FTS. Mostramos os dois cenários abaixo para tornar o ganho
     #     do Hybrid evidente: query natural longa vs. query "técnica" curta.
     queries = [
-        ("Como resolver erro TS2304?",            "doc-03"),
-        ("TS2304",                                "doc-03"),
+        ("Como resolver erro TS2304?", "doc-03"),
+        ("TS2304", "doc-03"),
         ("ECONNREFUSED em Node.js, o que fazer?", "doc-05"),
-        ("ECONNREFUSED",                          "doc-05"),
-        ("HTTP 429 retry-after",                  "doc-08"),
-        ("backfill NOT NULL column batches",      "doc-07"),
+        ("ECONNREFUSED", "doc-05"),
+        ("HTTP 429 retry-after", "doc-08"),
+        ("backfill NOT NULL column batches", "doc-07"),
     ]
 
     for query, expected_doc in queries:
