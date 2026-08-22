@@ -7,23 +7,23 @@
 
   <br>
 
-[![CI](https://github.com/esousa97/py-rag-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/esousa97/py-rag-engine/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/esousa97/py-rag-engine/actions/workflows/codeql.yml/badge.svg)](https://github.com/esousa97/py-rag-engine/actions/workflows/codeql.yml)
-[![Dependency review](https://img.shields.io/badge/dependency%20review-in%20CI-0085CA?style=flat&logo=githubactions&logoColor=white)](https://github.com/esousa97/py-rag-engine/actions/workflows/ci.yml)
-[![Publish](https://img.shields.io/badge/Publish-release%20%7C%20manual-blue?style=flat&logo=githubactions&logoColor=white)](https://github.com/esousa97/py-rag-engine/actions/workflows/publish.yml)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat&logo=python&logoColor=white)](https://github.com/esousa97/py-rag-engine/blob/main/pyproject.toml)
+[![CI](https://github.com/enoquesousa/py-rag-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/enoquesousa/py-rag-engine/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/enoquesousa/py-rag-engine/actions/workflows/codeql.yml/badge.svg)](https://github.com/enoquesousa/py-rag-engine/actions/workflows/codeql.yml)
+[![Dependency review](https://img.shields.io/badge/dependency%20review-in%20CI-0085CA?style=flat&logo=githubactions&logoColor=white)](https://github.com/enoquesousa/py-rag-engine/actions/workflows/ci.yml)
+[![Publish](https://img.shields.io/badge/Publish-release%20%7C%20manual-blue?style=flat&logo=githubactions&logoColor=white)](https://github.com/enoquesousa/py-rag-engine/actions/workflows/publish.yml)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat&logo=python&logoColor=white)](https://github.com/enoquesousa/py-rag-engine/blob/main/pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat)](LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/esousa97/py-rag-engine?style=flat)](https://github.com/esousa97/py-rag-engine/commits)
+[![Last Commit](https://img.shields.io/github/last-commit/enoquesousa/py-rag-engine?style=flat)](https://github.com/enoquesousa/py-rag-engine/commits)
 [![Ruff](https://img.shields.io/badge/Ruff-linting-261230?style=flat&logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
 [![pytest](https://img.shields.io/badge/tests-pytest-blue?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org/)
-[![CodeFactor](https://www.codefactor.io/repository/github/esousa97/py-rag-engine/badge)](https://www.codefactor.io/repository/github/esousa97/py-rag-engine)
-[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat&logo=pre-commit&logoColor=white)](https://github.com/esousa97/py-rag-engine/blob/main/.pre-commit-config.yaml)
+[![CodeFactor](https://www.codefactor.io/repository/github/enoquesousa/py-rag-engine/badge)](https://www.codefactor.io/repository/github/enoquesousa/py-rag-engine)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?style=flat&logo=pre-commit&logoColor=white)](https://github.com/enoquesousa/py-rag-engine/blob/main/.pre-commit-config.yaml)
 
 </div>
 
 ---
 
-**py-rag-engine** is a small, production-minded **RAG engine**: **ingest** PDF and Markdown files, **chunk** them recursively (with optional embedding-based semantic splitting), **embed** through LM Studio, **store** vectors in PostgreSQL with `pgvector` (HNSW cosine index) alongside a `tsvector` GIN index for full-text search, **retrieve** with three composable stages (dense ANN + Postgres FTS → Reciprocal Rank Fusion → Cross-Encoder re-rank), and optionally **generate** grounded answers via an LM Studio chat model. A **FastAPI** app exposes the whole pipeline behind `/health`, `/documents`, and `/query`. An offline **RAGAS** runner benchmarks chunk size and embedding-model combinations. Canonical repository: `github.com/esousa97/py-rag-engine`.
+**py-rag-engine** is a small, production-minded **RAG engine**: **ingest** PDF and Markdown files, **chunk** them recursively (with optional embedding-based semantic splitting), **embed** through LM Studio, **store** vectors in PostgreSQL with `pgvector` (HNSW cosine index) alongside a `tsvector` GIN index for full-text search, **retrieve** with three composable stages (dense ANN + Postgres FTS → Reciprocal Rank Fusion → Cross-Encoder re-rank), and optionally **generate** grounded answers via an LM Studio chat model. A **FastAPI** app exposes the whole pipeline behind `/health`, `/documents`, and `/query`. An offline **RAGAS** runner benchmarks chunk size and embedding-model combinations. Canonical repository: `github.com/enoquesousa/py-rag-engine`.
 
 ## Pipeline overview
 
@@ -132,7 +132,7 @@ No external job/database server beyond Postgres is required; the API and CLI scr
 ### From source (recommended)
 
 ```bash
-git clone https://github.com/esousa97/py-rag-engine.git
+git clone https://github.com/enoquesousa/py-rag-engine.git
 cd py-rag-engine
 pip install -e ".[api,embeddings]"
 # add ".[eval]" too if you plan to run the RAGAS evaluation
@@ -366,7 +366,7 @@ Issues and pull requests are welcome. Run `pytest -q` and `ruff check src tests`
 
 ## Changelog
 
-Tracked via GitHub releases and the [commit history](https://github.com/esousa97/py-rag-engine/commits).
+Tracked via GitHub releases and the [commit history](https://github.com/enoquesousa/py-rag-engine/commits).
 
 ## License
 
@@ -379,12 +379,12 @@ Tracked via GitHub releases and the [commit history](https://github.com/esousa97
 **Enoque Sousa**
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=flat&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/enoque-sousa-bb89aa168/)
-[![GitHub](https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white)](https://github.com/esousa97)
+[![GitHub](https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white)](https://github.com/enoquesousa)
 [![Portfolio](https://img.shields.io/badge/Portfolio-FF5722?style=flat&logo=target&logoColor=white)](https://enoquesousa.vercel.app)
 
 **[⬆ Back to Top](#py-rag-engine)**
 
-Made with ❤️ by [Enoque Sousa](https://github.com/esousa97)
+Made with ❤️ by [Enoque Sousa](https://github.com/enoquesousa)
 
 **Project status:** Study project
 
