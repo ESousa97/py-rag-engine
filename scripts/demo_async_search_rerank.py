@@ -167,7 +167,7 @@ def main() -> int:
     banner("Re-ranking with flashrank ms-marco-MiniLM-L-6-v2")
     rerank_cache = os.environ.get(
         "FLASHRANK_CACHE_DIR",
-        r"C:\Users\sousa\projects\github-esousa97-offline\py-rag-engine\.cache",
+        r"C:\Users\sousa\projects\github-enoquesousa-offline\py-rag-engine\.cache",
     )
     reranker = FlashrankReranker(
         model_name="ms-marco-MiniLM-L-6-v2",
