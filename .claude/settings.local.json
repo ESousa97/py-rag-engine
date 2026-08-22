@@ -6,7 +6,7 @@
       "Bash(where.exe docker *)",
       "Bash(git --version)",
       "Bash(PYTHONPATH=src LM_STUDIO_BASE_URL=http://localhost:1234 LM_STUDIO_EMBEDDING_MODEL=text-embedding-bge-m3 DEMO_POSTGRES_URL=postgresql+psycopg://postgres:[password]@localhost:5434/rag python scripts/demo_rerank.py data/gdp_document_0.pdf --query \"What is the geotechnical investigation methodology used in this report?\" --reranker-model \"$\\(pwd\\)/.cache/ms-marco-MiniLM-L-6-v2\")",
-      "Bash(python -c \"import os; p=r'C:\\\\\\\\Users\\\\\\\\sousa\\\\\\\\projects\\\\\\\\github-esousa97\\\\\\\\py-rag-engine\\\\\\\\.cache\\\\\\\\ms-marco-MiniLM-L-6-v2'; print\\('exists:', os.path.isdir\\(p\\)\\); print\\('config:', os.path.isfile\\(os.path.join\\(p, 'config.json'\\)\\)\\)\")",
+      "Bash(python -c \"import os; p=r'C:\\\\\\\\Users\\\\\\\\sousa\\\\\\\\projects\\\\\\\\github-enoquesousa\\\\\\\\py-rag-engine\\\\\\\\.cache\\\\\\\\ms-marco-MiniLM-L-6-v2'; print\\('exists:', os.path.isdir\\(p\\)\\); print\\('config:', os.path.isfile\\(os.path.join\\(p, 'config.json'\\)\\)\\)\")",
       "Bash(curl.exe -s http://localhost:1234/v1/models)",
       "Bash(curl.exe -s http://localhost:1234/v1/models -H \"Content-Type: application/json\")",
       "Bash(.venv/Scripts/python.exe -m pip install \"ragas>=0.2\" \"langchain-openai>=0.1\" \"datasets>=2.0\")",
